@@ -1,0 +1,33 @@
+FROM docker.m.daocloud.io/library/node:22-bookworm-slim AS node-runtime
+
+FROM docker.1ms.run/cm2network/steamcmd:root-bookworm
+
+COPY --from=node-runtime /usr/local /usr/local
+
+WORKDIR /workspace
+
+COPY --chown=steam:steam tsconfig.base.json ./tsconfig.base.json
+COPY --chown=steam:steam packages/shared ./packages/shared
+COPY --chown=steam:steam apps/server/package.json apps/server/package-lock.json ./apps/server/
+
+USER steam
+WORKDIR /workspace/apps/server
+RUN npm ci
+
+USER root
+WORKDIR /workspace
+COPY --chown=steam:steam apps/server ./apps/server
+
+WORKDIR /workspace/apps/server
+
+ENV NODE_ENV=production
+ENV PORT=3001
+ENV HOME=/home/steam
+ENV PANEL_DB_PATH=/data/panel.sqlite
+ENV PANEL_DEFAULT_DOWNLOAD_ROOT=/downloads/431960
+ENV STEAMCMD_SCRIPT_PATH=/home/steam/steamcmd/steamcmd.sh
+ENV WORKSHOP_CONTENT_DIR=/home/steam/Steam/steamapps/workshop/content/431960
+
+EXPOSE 3001
+
+CMD ["npm", "run", "start"]

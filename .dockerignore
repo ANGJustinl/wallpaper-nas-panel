@@ -1,0 +1,15 @@
+*
+!apps/
+!apps/server/
+!apps/server/**
+!apps/web/
+!apps/web/**
+!packages/
+!packages/shared/
+!packages/shared/**
+!tsconfig.base.json
+
+apps/**/node_modules
+apps/**/dist
+apps/server/data
+apps/**/*.log

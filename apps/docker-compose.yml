@@ -1,0 +1,71 @@
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: apps/server/Dockerfile.api
+    environment:
+      PORT: 3001
+      PANEL_DB_PATH: /data/panel.sqlite
+      PANEL_DEFAULT_STEAM_ACCOUNT: ${PANEL_DEFAULT_STEAM_ACCOUNT:-nas-panel-operator}
+      PANEL_DEFAULT_DOWNLOAD_ROOT: ${PANEL_DEFAULT_DOWNLOAD_ROOT:-/downloads/431960}
+      PANEL_DEFAULT_METADATA_LANGUAGE: ${PANEL_DEFAULT_METADATA_LANGUAGE:-en-US}
+      PANEL_DEFAULT_REQUEST_INTERVAL_MS: ${PANEL_DEFAULT_REQUEST_INTERVAL_MS:-1250}
+      PANEL_DEFAULT_AUTO_GENERATE_NFO: ${PANEL_DEFAULT_AUTO_GENERATE_NFO:-true}
+      PANEL_DEFAULT_PROXY_ENABLED: ${PANEL_DEFAULT_PROXY_ENABLED:-false}
+      PANEL_DEFAULT_PROXY_URL: ${PANEL_DEFAULT_PROXY_URL:-http://10.100.1.4:7890}
+      STEAMCMD_SCRIPT_PATH: /home/steam/steamcmd/steamcmd.sh
+      WORKSHOP_CONTENT_DIR: /home/steam/Steam/steamapps/workshop/content/431960
+      STEAM_APP_ID: 431960
+      STEAMCMD_LOCK_SOCKET_PATH: ${STEAMCMD_LOCK_SOCKET_PATH:-/data/locks/steamcmd.sock}
+      STEAMCMD_BATCH_MAX_ITEMS: ${STEAMCMD_BATCH_MAX_ITEMS:-20}
+    volumes:
+      - panel-db:/data
+      - panel-downloads:/downloads
+      - steam-home:/home/steam/Steam
+      - steamcmd-install:/home/steam/steamcmd
+    ports:
+      - "${PANEL_API_PORT:-3001}:3001"
+    restart: unless-stopped
+
+  worker:
+    build:
+      context: ..
+      dockerfile: apps/server/Dockerfile.worker
+    environment:
+      PANEL_DB_PATH: /data/panel.sqlite
+      PANEL_DEFAULT_STEAM_ACCOUNT: ${PANEL_DEFAULT_STEAM_ACCOUNT:-nas-panel-operator}
+      PANEL_DEFAULT_DOWNLOAD_ROOT: ${PANEL_DEFAULT_DOWNLOAD_ROOT:-/downloads/431960}
+      PANEL_DEFAULT_METADATA_LANGUAGE: ${PANEL_DEFAULT_METADATA_LANGUAGE:-en-US}
+      PANEL_DEFAULT_REQUEST_INTERVAL_MS: ${PANEL_DEFAULT_REQUEST_INTERVAL_MS:-1250}
+      PANEL_DEFAULT_AUTO_GENERATE_NFO: ${PANEL_DEFAULT_AUTO_GENERATE_NFO:-true}
+      PANEL_DEFAULT_PROXY_ENABLED: ${PANEL_DEFAULT_PROXY_ENABLED:-false}
+      PANEL_DEFAULT_PROXY_URL: ${PANEL_DEFAULT_PROXY_URL:-http://10.100.1.4:7890}
+      STEAMCMD_SCRIPT_PATH: /home/steam/steamcmd/steamcmd.sh
+      WORKSHOP_CONTENT_DIR: /home/steam/Steam/steamapps/workshop/content/431960
+      STEAM_APP_ID: 431960
+      STEAMCMD_LOCK_SOCKET_PATH: ${STEAMCMD_LOCK_SOCKET_PATH:-/data/locks/steamcmd.sock}
+      STEAMCMD_BATCH_MAX_ITEMS: ${STEAMCMD_BATCH_MAX_ITEMS:-20}
+    volumes:
+      - panel-db:/data
+      - panel-downloads:/downloads
+      - steam-home:/home/steam/Steam
+      - steamcmd-install:/home/steam/steamcmd
+    restart: unless-stopped
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_BASE_URL: ""
+    depends_on:
+      - api
+    ports:
+      - "${PANEL_WEB_PORT:-8080}:80"
+    restart: unless-stopped
+
+volumes:
+  panel-db:
+  panel-downloads:
+  steam-home:
+  steamcmd-install:
