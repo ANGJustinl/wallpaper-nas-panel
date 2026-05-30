@@ -8,7 +8,9 @@ interface ExplorePageProps {
   filters: WorkshopBrowseFilters;
   draftFilters: WorkshopBrowseFilters;
   selectedIds: string[];
+  selectedItemId: string | null;
   onSelectionChange: (nextIds: string[]) => void;
+  onInspectItem: (itemId: string | null) => void;
   enabledFilterCount: number;
   isLoading: boolean;
   notices: StatusBannerContent[];
@@ -16,6 +18,7 @@ interface ExplorePageProps {
   onApplyFilters: () => void;
   onClearFilters: () => void;
   onRefresh: () => void;
+  onViewTasks: () => void;
   onToggleSelect: (itemId: string, intent?: { additive?: boolean; range?: boolean }) => void;
   onSelectAll: () => void;
   onClearSelection: () => void;
@@ -123,12 +126,22 @@ function rectanglesIntersect(a: DOMRect, b: { left: number; top: number; right: 
   return a.right >= b.left && a.left <= b.right && a.bottom >= b.top && a.top <= b.bottom;
 }
 
+function formatMetadataValue(values: string[] | string) {
+  if (Array.isArray(values)) {
+    return values.length ? values.join(' / ') : '未记录';
+  }
+
+  return values || '未记录';
+}
+
 export function ExplorePage({
   items,
   filters,
   draftFilters,
   selectedIds,
+  selectedItemId,
   onSelectionChange,
+  onInspectItem,
   enabledFilterCount,
   isLoading,
   notices,
@@ -136,6 +149,7 @@ export function ExplorePage({
   onApplyFilters,
   onClearFilters,
   onRefresh,
+  onViewTasks,
   onToggleSelect,
   onSelectAll,
   onClearSelection,
@@ -148,6 +162,7 @@ export function ExplorePage({
   const selectedLookup = useMemo(() => new Set(selectedIds), [selectedIds]);
   const queueingLookup = useMemo(() => new Set(queueingItemIds), [queueingItemIds]);
   const resultsTagline = createTagline(filters, items.length);
+  const selectedItem = items.find((item) => item.id === selectedItemId) ?? null;
   const sidebarRef = useRef<HTMLElement | null>(null);
   const sidebarScrollRef = useRef<HTMLDivElement | null>(null);
   const resultsGridRef = useRef<HTMLDivElement | null>(null);
@@ -258,34 +273,42 @@ export function ExplorePage({
       return;
     }
 
-    const containerRect = container.getBoundingClientRect();
-    const selectionBounds = {
-      left: Math.min(dragState.startX, event.clientX),
-      top: Math.min(dragState.startY, event.clientY),
-      right: Math.max(dragState.startX, event.clientX),
-      bottom: Math.max(dragState.startY, event.clientY),
-    };
-    const intersectedIds = readIntersectedItemIds(selectionBounds);
-    const nextSelection = dragState.additive
-      ? Array.from(new Set([...dragState.baseSelection, ...intersectedIds]))
-      : intersectedIds;
-
     if (!isDragSelecting) {
       setIsDragSelecting(true);
       document.body.style.userSelect = 'none';
     }
 
+    const containerBounds = container.getBoundingClientRect();
+    const left = Math.max(0, Math.min(dragState.startX, event.clientX) - containerBounds.left);
+    const top = Math.max(0, Math.min(dragState.startY, event.clientY) - containerBounds.top);
+    const right = Math.min(containerBounds.width, Math.max(dragState.startX, event.clientX) - containerBounds.left);
+    const bottom = Math.min(containerBounds.height, Math.max(dragState.startY, event.clientY) - containerBounds.top);
+
     setDragRect({
-      left: Math.max(0, selectionBounds.left - containerRect.left),
-      top: Math.max(0, selectionBounds.top - containerRect.top),
-      width: selectionBounds.right - selectionBounds.left,
-      height: selectionBounds.bottom - selectionBounds.top,
+      left,
+      top,
+      width: Math.max(0, right - left),
+      height: Math.max(0, bottom - top),
     });
-    onSelectionChange(nextSelection);
+
+    const intersectedIds = readIntersectedItemIds({
+      left: containerBounds.left + left,
+      top: containerBounds.top + top,
+      right: containerBounds.left + right,
+      bottom: containerBounds.top + bottom,
+    });
+
+    const nextIds = dragState.additive
+      ? Array.from(new Set([...dragState.baseSelection, ...intersectedIds]))
+      : intersectedIds;
+
+    onSelectionChange(nextIds);
+    onInspectItem(intersectedIds.at(-1) ?? nextIds.at(-1) ?? selectedItemId);
   }
 
   function handleResultsPointerUp(event: ReactPointerEvent<HTMLDivElement>) {
-    if (dragStateRef.current?.pointerId !== event.pointerId) {
+    const dragState = dragStateRef.current;
+    if (!dragState || dragState.pointerId !== event.pointerId) {
       return;
     }
 
@@ -293,15 +316,35 @@ export function ExplorePage({
   }
 
   return (
-    <section className="explore-layout">
-      <aside ref={sidebarRef} className="explore-sidebar">
-        <div className="explore-sidebar__header">
-          <p className="section-kicker">Workshop Browser</p>
-          <h2>探索创意工坊</h2>
-          <p className="section-copy">保留现有筛选和批量入队流程，只把界面密度、层次和缩略图排布调整到更接近 Steam 浏览页。</p>
+    <section className={`explore-layout${selectedItem ? ' explore-layout--inspecting' : ''}`}>
+      {notices.length ? (
+        <div className="page-notices">
+          {notices.map((notice) => (
+            <StatusBanner key={`${notice.title}-${notice.tone}`} {...notice} />
+          ))}
+        </div>
+      ) : null}
+
+      <aside ref={sidebarRef} className="tool-rail explore-rail">
+        <div className="tool-rail__header">
+          <div>
+            <p className="tool-rail__eyebrow">筛选面板</p>
+            <h2>筛选条件</h2>
+            <p className="tool-rail__subtitle">筛选条件固定在左侧，方便连续筛、连续看、连续下。</p>
+          </div>
+          <div className="tool-rail__stats">
+            <div>
+              <span>筛选</span>
+              <strong>{enabledFilterCount}</strong>
+            </div>
+            <div>
+              <span>结果</span>
+              <strong>{items.length}</strong>
+            </div>
+          </div>
         </div>
 
-        <label className="search-field search-field--sidebar">
+        <label className="search-field search-field--rail">
           <span>搜索工坊</span>
           <input
             value={draftFilters.query}
@@ -310,7 +353,7 @@ export function ExplorePage({
           />
         </label>
 
-        <div ref={sidebarScrollRef} className="filter-panel filter-panel--sidebar">
+        <div ref={sidebarScrollRef} className="filter-panel filter-panel--rail">
           <section className="filter-panel__group">
             <h3>MISCELLANEOUS</h3>
             <ul>
@@ -337,6 +380,7 @@ export function ExplorePage({
             <label key={key} className="filter-panel__select-group">
               <span>{selectLabels[key as keyof typeof selectLabels]}</span>
               <select
+                aria-label={key === 'category' ? 'category' : key}
                 value={draftFilters[key as keyof typeof selectOptions]}
                 onChange={(event) => onDraftChange({ ...draftFilters, [key]: event.target.value } as WorkshopBrowseFilters)}
               >
@@ -388,53 +432,20 @@ export function ExplorePage({
           ))}
         </div>
 
-        <div className="explore-sidebar__actions">
-          <button className="signal-button" onClick={onApplyFilters}>应用筛选</button>
-          <button className="signal-button signal-button--secondary" onClick={onClearFilters}>清空筛选</button>
+        <div className="tool-rail__footer">
+          <button className="signal-button signal-button--inline" onClick={onApplyFilters}>应用筛选</button>
+          <button className="signal-button signal-button--secondary signal-button--inline" onClick={onClearFilters}>清空筛选</button>
         </div>
       </aside>
 
-      <div className="explore-results">
-        {notices.length ? (
-          <div className="page-notices">
-            {notices.map((notice) => (
-              <StatusBanner key={`${notice.title}-${notice.tone}`} {...notice} />
-            ))}
+      <div className="workspace-panel workspace-panel--main">
+        <header className="workspace-header">
+          <div>
+            <h2>探索创意工坊</h2>
+            <p className="workspace-header__meta">{isLoading ? '正在刷新结果…' : resultsTagline}</p>
           </div>
-        ) : null}
-
-        <section className="explore-results__intro">
-          <div className="explore-results__summary">
-            <p className="section-kicker">Filter Settings & Workshop Results</p>
-            <h3>按当前筛选直接浏览结果</h3>
-            <p className="section-copy">左侧负责范围，右侧负责排序、刷新和批量入队。界面风格向 Steam 靠拢，但工作流仍然保持现在这套。</p>
-          </div>
-
-          <div className="explore-results__stats">
-            <div>
-              <span>当前结果</span>
-              <strong>{resultsTagline}</strong>
-            </div>
-            <div>
-              <span>已启用筛选</span>
-              <strong>{enabledFilterCount}</strong>
-            </div>
-            <div>
-              <span>已选择</span>
-              <strong>{selectedCount}</strong>
-            </div>
-          </div>
-        </section>
-
-        <section className="explore-results__toolbar">
-          <div className="explore-results__summary">
-            <p className="section-kicker">Workshop Results</p>
-            <h3>{isLoading ? '正在刷新结果…' : '当前筛选结果'}</h3>
-            <p className="section-copy">调整排序和时间范围后，点击刷新即可重新拉取同一套筛选条件下的真实结果。</p>
-          </div>
-
-          <div className="explore-results__controls">
-            <label>
+          <div className="workspace-header__actions">
+            <label className="toolbar-field">
               <span>排序方式</span>
               <select
                 value={draftFilters.sort}
@@ -448,7 +459,7 @@ export function ExplorePage({
               </select>
             </label>
 
-            <label>
+            <label className="toolbar-field">
               <span>时间范围</span>
               <select
                 value={draftFilters.period}
@@ -467,21 +478,21 @@ export function ExplorePage({
               {isLoading ? '正在刷新…' : '刷新结果'}
             </button>
           </div>
-        </section>
+        </header>
 
-        <section className="explore-results__bulkbar">
-          <div className="explore-results__bulkmeta">
-            <strong>批量操作</strong>
-            <span>
-              {isSelectionMode
-                ? '框选模式已开启，可直接在结果区拖拽批量选取；按 Esc 或点击“结束选取”退出。'
-                : selectedCount === 0
-                  ? '先点击“开始选取”进入框选模式，或继续使用勾选框把结果加入批量选择。支持 Ctrl/Cmd 追加，Shift 范围连选。'
-                  : `已选择 ${selectedCount} 项，可直接批量入队。支持 Ctrl/Cmd 追加，Shift 范围连选。`}
-            </span>
+        <div className="selection-toolbar">
+          <div className="selection-toolbar__stats">
+            <div className="compact-stat">
+              <span>已选择</span>
+              <strong>{selectedCount}</strong>
+            </div>
+            <div className="compact-stat">
+              <span>筛选已启用</span>
+              <strong>{enabledFilterCount}</strong>
+            </div>
           </div>
 
-          <div className="explore-results__actions">
+          <div className="selection-toolbar__actions">
             <button
               className="signal-button signal-button--secondary signal-button--inline"
               onClick={() => {
@@ -497,20 +508,23 @@ export function ExplorePage({
             <button className="signal-button signal-button--inline" onClick={onBulkQueue} disabled={selectedCount === 0 || isBulkQueueing}>
               {isBulkQueueing ? '正在加入下载…' : '批量加入下载'}
             </button>
+            <button className="signal-button signal-button--ghost signal-button--inline" onClick={onViewTasks}>任务页</button>
           </div>
-        </section>
+        </div>
 
         {isSelectionMode ? (
-          <div className="explore-results__selection-hint">
-            <strong>开始框选</strong>
-            <span>在下方结果区拖拽即可批量选择多个项目，也可以继续用 Ctrl/Cmd 点选追加、Shift 连续选取，下载后可直接通过右上角任务入口查看进度。</span>
-          </div>
+          <StatusBanner
+            compact
+            tone="info"
+            title="框选模式已开启"
+            detail="在结果区拖拽即可批量选择，继续支持 Ctrl/Cmd 追加和 Shift 连选。"
+          />
         ) : null}
 
         {items.length ? (
           <div
             ref={resultsGridRef}
-            className={`workshop-grid workshop-grid--results${isSelectionMode ? ' workshop-grid--selection-mode' : ''}${isDragSelecting ? ' workshop-grid--dragging' : ''}`}
+            className={`workshop-list${selectedItem ? ' workshop-list--inspecting' : ''}${isSelectionMode ? ' workshop-list--selection-mode' : ''}${isDragSelecting ? ' workshop-list--dragging' : ''}`}
             onPointerDown={handleResultsPointerDown}
             onPointerMove={handleResultsPointerMove}
             onPointerUp={handleResultsPointerUp}
@@ -521,6 +535,8 @@ export function ExplorePage({
               <WorkshopCard
                 key={item.id}
                 item={item}
+                inspected={item.id === selectedItemId}
+                onInspect={onInspectItem}
                 onQueue={onQueue}
                 queueDisabled={queueingLookup.has(item.id)}
                 selected={selectedLookup.has(item.id)}
@@ -540,12 +556,107 @@ export function ExplorePage({
             ) : null}
           </div>
         ) : (
-          <div className="explore-results__empty">
+          <div className="workspace-empty">
             <h3>没有匹配结果</h3>
             <p>可以先放宽 Genre 或 Miscellaneous，再重新应用筛选。</p>
           </div>
         )}
       </div>
+
+      {selectedItem ? (
+        <aside className="workspace-panel workspace-panel--inspector explore-inspector">
+          <div className="inspector-media">
+            {selectedItem.previewUrl ? (
+              <img src={selectedItem.previewUrl} alt={`${selectedItem.title} 预览图`} loading="lazy" />
+            ) : (
+              <div className="inspector-media__placeholder">{selectedItem.title.slice(0, 22)}</div>
+            )}
+          </div>
+
+          <div className="inspector-header">
+            <p className="inspector-label">已选项目</p>
+            <h3>{selectedItem.title}</h3>
+            <p>{selectedItem.author}</p>
+          </div>
+
+          <div className="inspector-actions">
+            <button
+              type="button"
+              className="signal-button signal-button--inline"
+              onClick={() => onQueue(selectedItem)}
+              disabled={queueingLookup.has(selectedItem.id)}
+            >
+              {queueingLookup.has(selectedItem.id) ? '正在加入…' : '加入下载'}
+            </button>
+            <a
+              className="signal-button signal-button--ghost signal-button--inline"
+              href={`https://steamcommunity.com/sharedfiles/filedetails/?id=${selectedItem.id}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              查看工坊页面
+            </a>
+            <button
+              type="button"
+              className="signal-button signal-button--ghost signal-button--inline"
+              onClick={() => onInspectItem(null)}
+            >
+              收起详情
+            </button>
+          </div>
+
+          <dl className="inspector-facts">
+            <div>
+              <dt>项目 ID</dt>
+              <dd>{selectedItem.id}</dd>
+            </div>
+            <div>
+              <dt>评分</dt>
+              <dd>{selectedItem.rating > 0 ? `${selectedItem.rating.toFixed(1)} / 5` : '未评分'}</dd>
+            </div>
+            <div>
+              <dt>Miscellaneous</dt>
+              <dd>{formatMetadataValue(selectedItem.metadata.miscellaneous)}</dd>
+            </div>
+            <div>
+              <dt>Type</dt>
+              <dd>{formatMetadataValue(selectedItem.metadata.type)}</dd>
+            </div>
+            <div>
+              <dt>Age Rating</dt>
+              <dd>{formatMetadataValue(selectedItem.metadata.ageRating)}</dd>
+            </div>
+            <div>
+              <dt>Genre</dt>
+              <dd>{formatMetadataValue(selectedItem.metadata.genre)}</dd>
+            </div>
+            <div>
+              <dt>Resolution</dt>
+              <dd>{formatMetadataValue(selectedItem.metadata.resolution)}</dd>
+            </div>
+            <div>
+              <dt>Category</dt>
+              <dd>{formatMetadataValue(selectedItem.metadata.category)}</dd>
+            </div>
+          </dl>
+
+          <section className="inspector-section">
+            <h4>描述</h4>
+            <p>{selectedItem.description}</p>
+          </section>
+
+          {selectedItem.tags.length ? (
+            <section className="inspector-section">
+              <h4>标签</h4>
+              <ul className="inspector-tags" aria-label={`${selectedItem.title} 标签`}>
+                {selectedItem.tags.map((tag) => (
+                  <li key={tag}>{tag}</li>
+                ))}
+              </ul>
+            </section>
+          ) : null}
+        </aside>
+      ) : null}
     </section>
   );
 }

@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DownloadTask, DownloaderWorkerSnapshot } from '../../../../packages/shared/src';
 import { StatusBanner, type StatusBannerContent } from '../components/status-banner';
-import { TaskList } from '../components/task-list';
+import { TaskList, deriveTaskProgress, failureLabel, formatTaskError, formatTaskLog, statusLabel } from '../components/task-list';
 
 interface TasksPageProps {
   tasks: DownloadTask[];
@@ -40,76 +40,53 @@ export function TasksPage({
   onDeleteTask,
   onClearHistory,
 }: TasksPageProps) {
-  const runningTasks = tasks.filter((task) => task.status === 'running' || task.status === 'pending');
-  const finishedTasks = tasks.filter((task) => task.status === 'succeeded' || task.status === 'failed');
-  const totalTasks = tasks.length;
-  const failedTasks = tasks.filter((task) => task.status === 'failed').length;
-  const succeededTasks = tasks.filter((task) => task.status === 'succeeded').length;
-  const workerTone = worker.online ? worker.status : 'offline';
-  const runningSectionRef = useRef<HTMLElement | null>(null);
-  const [isRunningFocused, setIsRunningFocused] = useState(false);
+  const runningTasks = useMemo(() => tasks.filter((task) => task.status === 'running' || task.status === 'pending'), [tasks]);
+  const historyTasks = useMemo(() => tasks.filter((task) => task.status === 'succeeded' || task.status === 'failed'), [tasks]);
+  const failedTasks = historyTasks.filter((task) => task.status === 'failed').length;
+  const succeededTasks = historyTasks.filter((task) => task.status === 'succeeded').length;
+  const workerHeadlineStatus = worker.online
+    ? worker.status === 'processing'
+      ? '工作中'
+      : workerStatusLabel[worker.status]
+    : '离线';
+  const [viewMode, setViewMode] = useState<'active' | 'history'>(runningTasks.length ? 'active' : 'history');
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(runningTasks[0]?.id ?? historyTasks[0]?.id ?? null);
+  const listSectionRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (focusRunningToken <= 0) {
       return undefined;
     }
 
-    runningSectionRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
-    setIsRunningFocused(true);
+    setViewMode('active');
+    setSelectedTaskId((current) => current && runningTasks.some((task) => task.id === current) ? current : runningTasks[0]?.id ?? null);
+    listSectionRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'start' });
+    return undefined;
+  }, [focusRunningToken, runningTasks]);
 
-    const timer = window.setTimeout(() => {
-      setIsRunningFocused(false);
-    }, 2200);
+  useEffect(() => {
+    if (viewMode === 'active' && !runningTasks.length && historyTasks.length) {
+      setViewMode('history');
+      return;
+    }
 
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [focusRunningToken]);
+    if (viewMode === 'history' && !historyTasks.length && runningTasks.length) {
+      setViewMode('active');
+    }
+  }, [historyTasks.length, runningTasks.length, viewMode]);
+
+  const visibleTasks = viewMode === 'active' ? runningTasks : historyTasks;
+  const quickHistoryTasks = historyTasks.slice(0, 3);
+
+  useEffect(() => {
+    setSelectedTaskId((current) => current && visibleTasks.some((task) => task.id === current) ? current : visibleTasks[0]?.id ?? null);
+  }, [visibleTasks]);
+
+  const selectedTask = tasks.find((task) => task.id === selectedTaskId) ?? null;
+  const selectedProgress = selectedTask ? deriveTaskProgress(selectedTask) : null;
 
   return (
     <section className="tasks-layout">
-      <div className="tasks-summary">
-        <div>
-          <span>总任务数</span>
-          <strong>{totalTasks}</strong>
-        </div>
-        <div>
-          <span>进行中</span>
-          <strong>{runningTasks.length}</strong>
-        </div>
-        <div>
-          <span>失败</span>
-          <strong>{failedTasks}</strong>
-        </div>
-        <div>
-          <span>已完成</span>
-          <strong>{succeededTasks}</strong>
-        </div>
-      </div>
-
-      <section className="tasks-overview-panel">
-        <div className="tasks-overview-panel__copy">
-          <p className="section-kicker">Download Overview</p>
-          <h2>下载队列总览</h2>
-          <p className="section-copy">用阶段进度条看队列推进情况，历史区提供删除和失败重试，不再靠原始日志硬读状态。</p>
-        </div>
-        <div className="tasks-overview-panel__progress">
-          <div className="tasks-overview-panel__progress-head">
-            <strong>{runningTasks.length ? `当前有 ${runningTasks.length} 项正在推进` : '当前没有活动下载'}</strong>
-            <span>{totalTasks ? Math.round(((succeededTasks + failedTasks) / totalTasks) * 100) : 0}%</span>
-          </div>
-          <div className="tasks-overview-panel__progress-bar" aria-hidden="true">
-            <div
-              className="tasks-overview-panel__progress-fill"
-              style={{ width: `${totalTasks ? Math.round(((succeededTasks + failedTasks) / totalTasks) * 100) : 0}%` }}
-            />
-          </div>
-          <p className="tasks-overview-panel__meta">
-            {runningTasks.length ? '进行中任务会持续刷新进度与阶段文案。' : '可以继续从探索页加入项目，任务页会自动接管后续状态更新。'}
-          </p>
-        </div>
-      </section>
-
       {notices.length ? (
         <div className="page-notices">
           {notices.map((notice) => (
@@ -118,96 +95,225 @@ export function TasksPage({
         </div>
       ) : null}
 
-      <div className="tasks-sync-bar">
-        <div className="tasks-sync-bar__copy">
-          <p className="section-kicker">任务同步</p>
-          <p className="tasks-sync-note">
-            {isSyncing ? '任务状态自动刷新中 · 正在同步最新状态' : `任务状态自动刷新中${lastSyncedAt ? ` · 最近同步 ${lastSyncedAt}` : ''}`}
-          </p>
+      <header className="workspace-header workspace-header--page">
+        <div>
+          <h2>下载任务</h2>
+          <p className="workspace-header__meta">下载链路、失败处理和最近同步集中在一个工作区里。</p>
         </div>
-        <button type="button" className="signal-button signal-button--secondary signal-button--inline" onClick={onRefresh}>
-          {isSyncing ? '刷新中…' : '立即刷新'}
-        </button>
+        <div className="workspace-header__actions">
+          <button type="button" className="signal-button signal-button--secondary signal-button--inline" onClick={onRefresh}>
+            {isSyncing ? '刷新中…' : '立即刷新'}
+          </button>
+          <button
+            type="button"
+            className="signal-button signal-button--ghost signal-button--inline"
+            onClick={onClearHistory}
+            disabled={isClearingHistory || historyTasks.length === 0}
+          >
+            {isClearingHistory ? '清理中…' : '清理历史记录'}
+          </button>
+        </div>
+      </header>
+
+      <div className="stat-strip">
+        <div className="compact-stat">
+          <span>活跃任务</span>
+          <strong>{runningTasks.length}</strong>
+        </div>
+        <div className="compact-stat">
+          <span>失败</span>
+          <strong>{failedTasks}</strong>
+        </div>
+        <div className="compact-stat">
+          <span>已完成</span>
+          <strong>{succeededTasks}</strong>
+        </div>
+        <div className="compact-stat">
+          <span>Worker</span>
+          <strong>{workerHeadlineStatus}</strong>
+        </div>
+        <div className="compact-stat">
+          <span>最近同步</span>
+          <strong>{lastSyncedAt || '暂无'}</strong>
+        </div>
       </div>
 
-      <section className={`ops-status-panel tasks-worker-card tasks-worker-card--${workerTone}`}>
-        <div className="ops-status-panel__header">
-          <div>
-            <p className="section-kicker">Worker Runtime</p>
-            <h2>下载器运行面板</h2>
-          </div>
-          <p className="ops-status-panel__summary">队列、runner 和心跳在这里集中可见，方便快速判断下载链路是否在线。</p>
-        </div>
-
-        <div className="ops-metric-grid ops-metric-grid--4">
-          <div className="ops-metric-card">
-            <span>下载器状态</span>
-            <strong>{worker.online ? workerStatusLabel[worker.status] : '离线'}</strong>
-          </div>
-          <div className="ops-metric-card">
-            <span>Runner</span>
-            <strong>{worker.runnerId || '未启动'}</strong>
-          </div>
-          <div className="ops-metric-card">
-            <span>当前任务</span>
-            <strong>{worker.activeTaskTitle || worker.activeTaskId || '空闲中'}</strong>
-          </div>
-          <div className="ops-metric-card">
-            <span>心跳</span>
-            <strong>{worker.heartbeatAt || '暂无'}</strong>
-          </div>
-        </div>
-
-        {worker.lastError ? <p className="ops-status-panel__error">最近错误：{worker.lastError}</p> : null}
-      </section>
-
-      <section
-        ref={runningSectionRef}
-        className={`panel-section panel-section--tasks panel-section--tasks-primary${isRunningFocused ? ' panel-section--focus' : ''}`}
-      >
-        <div className="section-heading">
-          <p className="section-kicker">下载活动</p>
-          <h2>进行中的任务</h2>
-          <p className="section-copy">查看下载状态、执行时间，以及当前进行中的 steamcmd 队列。</p>
-        </div>
-        <TaskList
-          tasks={runningTasks}
-          emptyTitle="当前没有进行中的任务"
-          emptyCopy="从探索页选择作品后，下载任务会出现在这里，并自动刷新状态。"
-          onRetry={onRetry}
-          retryingTaskId={retryingTaskId}
-        />
-      </section>
-
-      <section className="panel-section panel-section--tasks panel-section--tasks-secondary">
-        <div className="section-heading section-heading--split">
-          <div className="section-heading__copy">
-            <p className="section-kicker">任务历史</p>
-            <h2>已完成与失败</h2>
-            <p className="section-copy">集中查看已完成项、失败项和后续重试入口。</p>
-          </div>
-          <div className="section-heading__actions">
+      <div className="workspace-split">
+        <section ref={listSectionRef} className="workspace-panel workspace-panel--main">
+          <div className="workspace-segmented">
             <button
               type="button"
-              className="signal-button signal-button--secondary signal-button--inline"
-              onClick={onClearHistory}
-              disabled={isClearingHistory || finishedTasks.length === 0}
+              className={`workspace-segmented__button${viewMode === 'active' ? ' is-active' : ''}`}
+              onClick={() => setViewMode('active')}
             >
-              {isClearingHistory ? '清理中…' : '清理历史记录'}
+              进行中
+            </button>
+            <button
+              type="button"
+              className={`workspace-segmented__button${viewMode === 'history' ? ' is-active' : ''}`}
+              onClick={() => setViewMode('history')}
+            >
+              历史
             </button>
           </div>
-        </div>
-        <TaskList
-          tasks={finishedTasks}
-          emptyTitle="还没有任务历史"
-          emptyCopy="一旦有成功或失败的下载记录，就会在这里保留并提供诊断信息。"
-          onRetry={onRetry}
-          onDeleteTask={onDeleteTask}
-          retryingTaskId={retryingTaskId}
-          deletingTaskId={deletingTaskId}
-          variant="history"
-        />
-      </section>
+
+          <div className="panel-copy">
+            <h3>{viewMode === 'active' ? '进行中的任务' : '历史任务'}</h3>
+            <p>{viewMode === 'active' ? '优先看正在下载、等待同步和刚完成整理的任务。' : '失败任务可直接重试，成功和失败记录都能单条删除。'}</p>
+          </div>
+
+          <TaskList
+            tasks={visibleTasks}
+            selectedTaskId={selectedTaskId}
+            emptyTitle={viewMode === 'active' ? '当前没有进行中的任务' : '还没有任务历史'}
+            emptyCopy={viewMode === 'active' ? '从探索页选择作品后，任务会自动出现在这里。' : '一旦出现成功或失败记录，就会在这里保留。'}
+            onSelectTask={setSelectedTaskId}
+            onRetry={onRetry}
+            onDeleteTask={viewMode === 'history' ? onDeleteTask : undefined}
+            retryingTaskId={retryingTaskId}
+            deletingTaskId={deletingTaskId}
+          />
+        </section>
+
+        <aside className="workspace-panel workspace-panel--inspector">
+          {selectedTask ? (
+            <>
+              <div className="inspector-header">
+                <p className="inspector-label">任务详情</p>
+                <h3>{selectedTask.workshopTitle}</h3>
+                <p>{selectedTask.workshopItemId}</p>
+              </div>
+
+              <div className="task-inspector__progress">
+                <div className="task-row__progress-head">
+                  <strong>{selectedProgress?.label}</strong>
+                  <span>{selectedProgress?.value ?? 0}%</span>
+                </div>
+                <div className={`task-row__progress-bar${selectedProgress?.indeterminate ? ' task-row__progress-bar--indeterminate' : ''}`} aria-hidden="true">
+                  <div className="task-row__progress-fill" style={{ width: `${selectedProgress?.value ?? 0}%` }} />
+                </div>
+                <p className="task-row__log">{selectedProgress?.detail}</p>
+              </div>
+
+              <dl className="inspector-facts">
+                <div>
+                  <dt>状态</dt>
+                  <dd>{statusLabel[selectedTask.status]}</dd>
+                </div>
+                <div>
+                  <dt>Runner</dt>
+                  <dd>{selectedTask.runnerId || '未分配'}</dd>
+                </div>
+                <div>
+                  <dt>尝试次数</dt>
+                  <dd>{selectedTask.attempts}</dd>
+                </div>
+                <div>
+                  <dt>开始时间</dt>
+                  <dd>{selectedTask.startedAt || '未开始'}</dd>
+                </div>
+                <div>
+                  <dt>结束时间</dt>
+                  <dd>{selectedTask.finishedAt || '进行中'}</dd>
+                </div>
+                <div>
+                  <dt>输出目录</dt>
+                  <dd>{selectedTask.outputPath || '尚未生成'}</dd>
+                </div>
+                {selectedTask.failureCode ? (
+                  <div>
+                    <dt>失败类型</dt>
+                    <dd>{failureLabel[selectedTask.failureCode]}</dd>
+                  </div>
+                ) : null}
+              </dl>
+
+              {selectedTask.errorMessage ? (
+                <section className="inspector-section">
+                  <h4>错误详情</h4>
+                  <p>{formatTaskError(selectedTask)}</p>
+                </section>
+              ) : null}
+
+              <section className="inspector-section">
+                <h4>最近输出</h4>
+                <p>{formatTaskLog(selectedTask)}</p>
+              </section>
+            </>
+          ) : (
+            <div className="workspace-empty workspace-empty--inspector">
+              <h3>选择一个任务</h3>
+              <p>右侧会显示状态、错误、进度和输出目录。</p>
+            </div>
+          )}
+
+          <div className="inspector-divider" />
+
+          <section className="inspector-section">
+            <h4>Worker 运行态</h4>
+            <dl className="inspector-facts">
+              <div>
+                <dt>下载器状态</dt>
+                <dd>{worker.online ? workerStatusLabel[worker.status] : '离线'}</dd>
+              </div>
+              <div>
+                <dt>当前任务</dt>
+                <dd>{worker.activeTaskTitle || worker.activeTaskId || '空闲中'}</dd>
+              </div>
+              <div>
+                <dt>心跳</dt>
+                <dd>{worker.heartbeatAt || '暂无'}</dd>
+              </div>
+              {worker.runnerId ? (
+                <div>
+                  <dt>Runner</dt>
+                  <dd>{worker.runnerId}</dd>
+                </div>
+              ) : null}
+            </dl>
+            {worker.lastError ? <p className="inspector-inline-error">最近错误：{worker.lastError}</p> : null}
+          </section>
+
+          {quickHistoryTasks.length ? (
+            <section className="inspector-section">
+              <h4>最近历史</h4>
+              <div className="history-strip">
+                {quickHistoryTasks.map((task) => (
+                  <article key={task.id} className="history-strip__item">
+                    <div className="history-strip__titleline">
+                      <strong>{task.workshopTitle}</strong>
+                      <span>{task.status === 'failed' ? failureLabel[task.failureCode ?? 'unknown_error'] : '已完成'}</span>
+                    </div>
+                    <p>{formatTaskLog(task)}</p>
+                    {task.status === 'failed' && formatTaskError(task) ? <span className="history-strip__error">{formatTaskError(task)}</span> : null}
+                    <div className="history-strip__actions">
+                      {task.status === 'failed' ? (
+                        <button
+                          type="button"
+                          className="signal-button signal-button--secondary signal-button--inline"
+                          onClick={() => onRetry(task.id)}
+                          disabled={retryingTaskId === task.id}
+                        >
+                          {retryingTaskId === task.id ? '重新排队中…' : '重新加入下载'}
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="signal-button signal-button--ghost signal-button--inline"
+                        aria-label={`删除记录 ${task.workshopTitle}`}
+                        onClick={() => onDeleteTask(task.id)}
+                        disabled={deletingTaskId === task.id}
+                      >
+                        {deletingTaskId === task.id ? '删除中…' : '删除记录'}
+                      </button>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ) : null}
+        </aside>
+      </div>
     </section>
   );
 }

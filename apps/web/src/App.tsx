@@ -258,6 +258,7 @@ export function App() {
   const [draftFilters, setDraftFilters] = useState<WorkshopBrowseFilters>(() => createDefaultFilters());
   const [catalogRequestVersion, setCatalogRequestVersion] = useState(0);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [selectedExploreItemId, setSelectedExploreItemId] = useState<string | null>(null);
   const [selectionAnchorId, setSelectionAnchorId] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<WorkshopItemSummary[]>(fallbackFeaturedItems);
   const [tasks, setTasks] = useState<DownloadTask[]>(fallbackTasks);
@@ -516,6 +517,20 @@ export function App() {
   }, [downloadedContents]);
 
   useEffect(() => {
+    setSelectedExploreItemId((current) => {
+      if (current && visibleItems.some((item) => item.id === current)) {
+        return current;
+      }
+
+      if (selectionAnchorId && visibleItems.some((item) => item.id === selectionAnchorId)) {
+        return selectionAnchorId;
+      }
+
+      return null;
+    });
+  }, [selectionAnchorId, visibleItems]);
+
+  useEffect(() => {
     if (!downloadCoachSummary?.allComplete || downloadCoachSummary.hasFailures) {
       return undefined;
     }
@@ -545,9 +560,10 @@ export function App() {
     setQueueError(null);
   }
 
-  function applySelectionSnapshot(nextIds: string[], anchorId?: string | null) {
+  function applySelectionSnapshot(nextIds: string[], anchorId?: string | null, inspectedId?: string | null) {
     setSelectedIds(nextIds);
     setSelectionAnchorId(anchorId ?? nextIds.at(-1) ?? null);
+    setSelectedExploreItemId(inspectedId ?? anchorId ?? nextIds.at(-1) ?? null);
   }
 
   function handleSelectionChange(nextIds: string[]) {
@@ -564,11 +580,13 @@ export function App() {
 
       setSelectedIds((current) => intent.additive ? Array.from(new Set([...current, ...rangeIds])) : rangeIds);
       setSelectionAnchorId(itemId);
+      setSelectedExploreItemId(itemId);
       return;
     }
 
     setSelectedIds((current) => current.includes(itemId) ? current.filter((id) => id !== itemId) : [...current, itemId]);
     setSelectionAnchorId(itemId);
+    setSelectedExploreItemId(itemId);
   }
 
   function selectAllVisible() {
@@ -968,7 +986,9 @@ export function App() {
             filters={filters}
             draftFilters={draftFilters}
             selectedIds={selectedIds}
+            selectedItemId={selectedExploreItemId}
             onSelectionChange={handleSelectionChange}
+            onInspectItem={setSelectedExploreItemId}
             onDraftChange={setDraftFilters}
             onApplyFilters={applyFilters}
             onClearFilters={clearFilters}
@@ -977,6 +997,7 @@ export function App() {
             onClearSelection={clearSelection}
             onBulkQueue={bulkQueueSelected}
             onQueue={handleQueue}
+            onViewTasks={openTasksViewFromCoach}
             enabledFilterCount={enabledFilterCount}
             isLoading={isCatalogLoading}
             onRefresh={refreshCatalog}

@@ -52,116 +52,25 @@ export function SettingsPage({ settings, runtime, isRefreshing, notices, onSetti
         </div>
       ) : null}
 
-      <section className="panel-section panel-section--settings panel-section--settings-primary">
-        <div className="section-heading">
-          <p className="section-kicker">连接与网络</p>
-          <h2>代理与下载通道</h2>
-          <p className="section-copy">先确认运行态和代理，再决定是否调整面板参数，减少来回切换页面的成本。</p>
-        </div>
-
-        <div className="settings-overview">
-          <section className="settings-overview-card">
-            <div className="settings-overview-card__header">
-              <p className="section-kicker">Proxy Control</p>
-              <h3>代理与读取</h3>
-              <p className="section-copy">代理开关和读取动作放在同一区域，方便先确认连通性再统一保存。</p>
-            </div>
-
-            <div className="ops-metric-grid ops-metric-grid--2">
-              <div className="ops-metric-card">
-                <span>代理状态</span>
-                <strong>{form.proxy.enabled ? '已接入代理' : '未启用代理'}</strong>
-              </div>
-              <div className="ops-metric-card">
-                <span>当前代理</span>
-                <strong>{form.proxy.url || '未填写'}</strong>
-              </div>
-            </div>
-
-            <div className="settings-overview-card__controls">
-              <label className="settings-grid__checkbox">
-                <input
-                  type="checkbox"
-                  checked={form.proxy.enabled}
-                  onChange={(event) => setForm((current) => ({
-                    ...current,
-                    proxy: { ...current.proxy, enabled: event.target.checked },
-                  }))}
-                />
-                <span>启用代理抓取与 steamcmd 下载</span>
-              </label>
-              <label className="settings-grid__field">
-                <span>代理地址</span>
-                <input
-                  value={form.proxy.url}
-                  onChange={(event) => setForm((current) => ({
-                    ...current,
-                    proxy: { ...current.proxy, url: event.target.value },
-                  }))}
-                  placeholder="http://10.100.1.4:7890"
-                />
-              </label>
-            </div>
-
-            <div className="settings-inline-actions">
-              <button type="button" className="signal-button signal-button--secondary signal-button--inline" onClick={onRefresh}>
-                {isRefreshing ? '读取中…' : '重新读取'}
-              </button>
-            </div>
-          </section>
-
-          <section className={`ops-status-panel settings-runtime-card settings-runtime-card--${runtime.available ? 'ready' : 'blocked'}`}>
-            <div className="ops-status-panel__header">
-              <div>
-                <p className="section-kicker">Runtime Check</p>
-                <h3>下载器运行时</h3>
-              </div>
-              <p className="ops-status-panel__summary">统一查看 steamcmd、内容目录和 worker 心跳，不需要再去别页对照。</p>
-            </div>
-
-            <div className="ops-metric-grid ops-metric-grid--2">
-              <div className="ops-metric-card">
-                <span>运行时</span>
-                <strong>{runtime.available ? 'steamcmd 已就绪' : 'steamcmd 当前不可执行'}</strong>
-              </div>
-              <div className="ops-metric-card">
-                <span>Worker 状态</span>
-                <strong>{runtime.worker.online ? workerStatusLabel[runtime.worker.status] : '离线'}</strong>
-              </div>
-              <div className="ops-metric-card">
-                <span>脚本路径</span>
-                <strong>{runtime.steamCmdScriptPath || '未配置'}</strong>
-              </div>
-              <div className="ops-metric-card">
-                <span>默认内容目录</span>
-                <strong>{runtime.workshopContentDir || '未配置'}</strong>
-              </div>
-              <div className="ops-metric-card">
-                <span>Worker Runner</span>
-                <strong>{runtime.worker.runnerId || '未启动'}</strong>
-              </div>
-              <div className="ops-metric-card">
-                <span>最后心跳</span>
-                <strong>{runtime.worker.heartbeatAt || '暂无'}</strong>
-              </div>
-            </div>
-
-            {runtime.availabilityError ? <p className="ops-status-panel__error">运行时提示：{runtime.availabilityError}</p> : null}
-            {runtime.worker.lastError ? <p className="ops-status-panel__error">最近错误：{runtime.worker.lastError}</p> : null}
-          </section>
-        </div>
-      </section>
-
-      <section className="panel-section panel-section--settings panel-section--settings-secondary">
-        <div className="section-heading">
-          <p className="section-kicker">面板设置</p>
+      <header className="workspace-header workspace-header--page">
+        <div>
           <h2>运行参数</h2>
-          <p className="section-copy">把账号、目录、抓取频率和自动生成规则收成两组，减少保存前的来回扫视。</p>
+          <p className="workspace-header__meta">配置写入、代理设置和运行时状态保持在同一个工作面里。</p>
         </div>
+        <div className="workspace-header__actions">
+          <button type="button" className="signal-button signal-button--secondary signal-button--inline" onClick={onRefresh}>
+            {isRefreshing ? '读取中…' : '重新读取'}
+          </button>
+        </div>
+      </header>
 
-        <div className="settings-groups">
-          <section className="settings-group-card">
-            <h3>账户与目录</h3>
+      <div className="workspace-split">
+        <section className="workspace-panel workspace-panel--main">
+          <div className="settings-group">
+            <div className="panel-copy">
+              <h3>账户与目录</h3>
+              <p>下载账号和输出路径会直接影响 worker 后续行为。</p>
+            </div>
             <div className="settings-form-grid">
               <label className="settings-grid__field">
                 <span>Steam 账号</span>
@@ -172,10 +81,13 @@ export function SettingsPage({ settings, runtime, isRefreshing, notices, onSetti
                 <input value={form.downloadRoot} onChange={(event) => setForm((current) => ({ ...current, downloadRoot: event.target.value }))} />
               </label>
             </div>
-          </section>
+          </div>
 
-          <section className="settings-group-card">
-            <h3>抓取与生成</h3>
+          <div className="settings-group">
+            <div className="panel-copy">
+              <h3>抓取与生成</h3>
+              <p>抓取语言、节流和自动生成行为统一放在这一组里。</p>
+            </div>
             <div className="settings-form-grid">
               <label className="settings-grid__field">
                 <span>元数据语言</span>
@@ -199,18 +111,87 @@ export function SettingsPage({ settings, runtime, isRefreshing, notices, onSetti
                 <span>下载成功后自动生成 NFO</span>
               </label>
             </div>
-          </section>
-        </div>
+          </div>
 
-        <div className="settings-actions">
-          <button className="signal-button" onClick={saveSettings} disabled={saveState === 'saving'}>
-            {saveState === 'saving' ? '正在保存全部设置…' : '保存全部设置'}
-          </button>
-          <p className={`settings-save-note settings-save-note--${saveState}`}>
-            {saveMessage}
-          </p>
-        </div>
-      </section>
+          <div className="settings-group">
+            <div className="panel-copy">
+              <h3>代理与连通性</h3>
+              <p>下载器和抓取链路会使用这里的代理设置。</p>
+            </div>
+            <div className="settings-form-grid">
+              <label className="settings-grid__checkbox">
+                <input
+                  type="checkbox"
+                  checked={form.proxy.enabled}
+                  onChange={(event) => setForm((current) => ({
+                    ...current,
+                    proxy: { ...current.proxy, enabled: event.target.checked },
+                  }))}
+                />
+                <span>启用代理抓取与 steamcmd 下载</span>
+              </label>
+              <label className="settings-grid__field">
+                <span>代理地址</span>
+                <input
+                  value={form.proxy.url}
+                  onChange={(event) => setForm((current) => ({
+                    ...current,
+                    proxy: { ...current.proxy, url: event.target.value },
+                  }))}
+                  placeholder="http://10.100.1.4:7890"
+                />
+              </label>
+            </div>
+          </div>
+
+          <div className="settings-actions">
+            <button className="signal-button" onClick={saveSettings} disabled={saveState === 'saving'}>
+              {saveState === 'saving' ? '正在保存全部设置…' : '保存全部设置'}
+            </button>
+            <p className={`settings-save-note settings-save-note--${saveState}`}>
+              {saveMessage}
+            </p>
+          </div>
+        </section>
+
+        <aside className="workspace-panel workspace-panel--inspector">
+          <div className="inspector-header">
+            <p className="inspector-label">运行时摘要</p>
+            <h3>下载器运行态</h3>
+            <p>确认 steamcmd、worker 和目录后，再决定是否改配置。</p>
+          </div>
+
+          <dl className="inspector-facts">
+            <div>
+              <dt>运行时</dt>
+              <dd>{runtime.available ? 'steamcmd 已就绪' : 'steamcmd 当前不可执行'}</dd>
+            </div>
+            <div>
+              <dt>Worker 状态</dt>
+              <dd>{runtime.worker.online ? workerStatusLabel[runtime.worker.status] : '离线'}</dd>
+            </div>
+            <div>
+              <dt>脚本路径</dt>
+              <dd>{runtime.steamCmdScriptPath || '未配置'}</dd>
+            </div>
+            <div>
+              <dt>默认内容目录</dt>
+              <dd>{runtime.workshopContentDir || '未配置'}</dd>
+            </div>
+            <div>
+              <dt>Worker Runner</dt>
+              <dd>{runtime.worker.runnerId || '未启动'}</dd>
+            </div>
+            <div>
+              <dt>最后心跳</dt>
+              <dd>{runtime.worker.heartbeatAt || '暂无'}</dd>
+            </div>
+          </dl>
+
+          {runtime.availabilityError ? <p className="inspector-inline-error">运行时提示：{runtime.availabilityError}</p> : null}
+          {runtime.worker.lastError ? <p className="inspector-inline-error">最近错误：{runtime.worker.lastError}</p> : null}
+        </aside>
+      </div>
     </section>
   );
 }

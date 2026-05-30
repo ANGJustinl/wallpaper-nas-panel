@@ -96,51 +96,42 @@ export function ContentPage({
         </div>
       ) : null}
 
-      <section className="content-overview">
-        <div className="content-overview__copy">
-          <p className="section-kicker">Downloaded Library</p>
+      <header className="workspace-header workspace-header--page">
+        <div>
           <h2>已下载内容管理</h2>
-          <p className="section-copy">下载成功后的内容会在这里保留元数据和目录信息。左侧按工坊卡片浏览，右侧像文件管理器一样查看详情。</p>
+          <p className="workspace-header__meta">像资源管理器一样浏览已下载项目，并在右侧固定查看 metadata 和本地信息。</p>
         </div>
-        <div className="content-overview__stats">
-          <div>
+        <div className="workspace-header__actions">
+          <div className="compact-stat">
             <span>内容数</span>
             <strong>{items.length}</strong>
           </div>
-          <div>
-            <span>当前选中</span>
-            <strong>{selectedItem ? '1' : '0'}</strong>
-          </div>
-          <div>
+          <div className="compact-stat">
             <span>最近同步</span>
             <strong>{lastSyncedAt || (isLoading ? '同步中' : '暂无')}</strong>
           </div>
+          <button type="button" className="signal-button signal-button--secondary signal-button--inline" onClick={onRefresh}>
+            {isLoading ? '刷新中…' : '重新读取'}
+          </button>
         </div>
-      </section>
+      </header>
 
-      <div className="content-toolbar">
-        <div className="content-toolbar__copy">
-          <p className="section-kicker">内容库同步</p>
-          <p className="tasks-sync-note">
-            {isLoading ? '正在读取内容目录与元数据快照' : lastSyncedAt ? `已读取内容库 · 最近同步 ${lastSyncedAt}` : '内容库已就绪'}
-          </p>
-        </div>
-        <button type="button" className="signal-button signal-button--secondary signal-button--inline" onClick={onRefresh}>
-          {isLoading ? '刷新中…' : '重新读取'}
-        </button>
-      </div>
+      <div className="workspace-split">
+        <section className="workspace-panel workspace-panel--main">
+          <div className="panel-copy">
+            <h3>内容列表</h3>
+            <p>左侧专注浏览与选择，详情与本地路径固定停在右侧检查器。</p>
+          </div>
 
-      <div className="content-workspace">
-        <section className="content-browser">
           {items.length ? (
-            <div className="content-grid">
+            <div className="content-list">
               {items.map((item) => {
                 const selected = item.id === selectedItem?.id;
 
                 return (
                   <article
                     key={item.id}
-                    className={`content-card${selected ? ' content-card--selected' : ''}`}
+                    className={`content-row${selected ? ' content-row--selected' : ''}`}
                     onClick={() => onSelect(item.id)}
                     onKeyDown={(event) => {
                       if (event.key === 'Enter' || event.key === ' ') {
@@ -152,15 +143,15 @@ export function ContentPage({
                     tabIndex={0}
                     aria-pressed={selected}
                   >
-                    <ContentPreview item={item} className="content-card__thumb" />
-                    <div className="content-card__body">
-                      <div className="content-card__meta">
+                    <ContentPreview item={item} className="content-row__thumb" />
+                    <div className="content-row__main">
+                      <div className="content-row__titleline">
+                        <h3>{item.title}</h3>
                         <span>{formatRating(item.rating)}</span>
-                        <span>{item.downloadedAt}</span>
                       </div>
-                      <h3>{item.title}</h3>
-                      <p>{item.author}</p>
-                      <ul className="workshop-card__tags" aria-label={`${item.title} 标签`}>
+                      <p className="content-row__meta">作者 {item.author} · {item.downloadedAt}</p>
+                      <p className="content-row__stats">{formatBytes(item.totalBytes)} · {item.fileCount} 个文件 · {item.entryCount} 个目录项</p>
+                      <ul className="workshop-row__tags" aria-label={`${item.title} 标签`}>
                         {item.tags.slice(0, 4).map((tag) => (
                           <li key={tag}>{tag}</li>
                         ))}
@@ -171,26 +162,27 @@ export function ContentPage({
               })}
             </div>
           ) : (
-            <div className="content-empty">
+            <div className="workspace-empty">
               <h3>还没有已下载内容</h3>
               <p>当任务成功完成后，内容目录、工坊描述和结构化标签会自动收录到这里。</p>
             </div>
           )}
         </section>
 
-        <aside className="content-detail">
+        <aside className="workspace-panel workspace-panel--inspector">
           {selectedItem ? (
             <>
-              <div className="content-detail__hero">
+              <div className="inspector-media">
                 <ContentPreview item={selectedItem} className="content-detail__media" />
-                <div className="content-detail__headline">
-                  <p className="section-kicker">Selected Item</p>
-                  <h3>{selectedItem.title}</h3>
-                  <p>{selectedItem.author}</p>
-                </div>
               </div>
 
-              <div className="content-detail__actions">
+              <div className="inspector-header">
+                <p className="inspector-label">已选内容</p>
+                <h3>{selectedItem.title}</h3>
+                <p>{selectedItem.author}</p>
+              </div>
+
+              <div className="inspector-actions">
                 <button
                   type="button"
                   className="signal-button signal-button--inline"
@@ -216,7 +208,7 @@ export function ContentPage({
                 </button>
               </div>
 
-              <dl className="content-detail__facts">
+              <dl className="inspector-facts">
                 <div>
                   <dt>输出目录</dt>
                   <dd>{selectedItem.outputPath}</dd>
@@ -247,14 +239,14 @@ export function ContentPage({
                 </div>
               </dl>
 
-              <section className="content-detail__section">
+              <section className="inspector-section">
                 <h4>创意工坊描述</h4>
                 <p>{selectedItem.description}</p>
               </section>
 
-              <section className="content-detail__section">
+              <section className="inspector-section">
                 <h4>元数据</h4>
-                <dl className="content-detail__metadata">
+                <dl className="inspector-facts inspector-facts--stacked">
                   {metadataRows.map(([label, value]) => (
                     <div key={label}>
                       <dt>{label}</dt>
@@ -265,9 +257,9 @@ export function ContentPage({
               </section>
             </>
           ) : (
-            <div className="content-empty content-empty--detail">
+            <div className="workspace-empty workspace-empty--inspector">
               <h3>选择一个内容项</h3>
-              <p>选中左侧卡片后，这里会显示目录、描述、标签和下载信息。</p>
+              <p>右侧会显示目录、描述、标签和下载信息。</p>
             </div>
           )}
         </aside>
