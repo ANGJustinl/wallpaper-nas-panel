@@ -113,6 +113,8 @@ http://127.0.0.1:8080/
 | `PANEL_DEFAULT_DELETE_FILES` | `false` | 删除内容记录时，“同时删除本地文件”复选框的默认状态。 |
 | `PANEL_DEFAULT_PROXY_ENABLED` | `false` | 是否默认启用代理。 |
 | `PANEL_DEFAULT_PROXY_URL` | `http://127.0.0.1:7890` | 代理地址，按你的网络环境修改。 |
+| `PANEL_STEAMCMD_INSTALL_SOURCE` | `steamcmd-install` | 可选。复用已有 SteamCMD 安装目录时，填宿主机上的 `steamcmd` 子目录。 |
+| `PANEL_STEAM_DATA_SOURCE` | `steam-home` | 可选。复用已有 Steam 登录态和 workshop cache 时，填宿主机上的 `Steam` 子目录。 |
 | `STEAMCMD_BATCH_MAX_ITEMS` | `20` | worker 每次合批下载的最大项目数。 |
 
 如果已经在 Web 面板里保存过设置，面板保存的设置会优先生效。`.env` 主要影响第一次初始化和容器运行环境。
@@ -139,6 +141,40 @@ docker compose up -d --build
 ```
 
 建议同时备份数据库 volume `panel-db`，否则内容文件还在，但面板里的任务和内容库记录可能丢失。
+
+## 复用已有 SteamCMD
+
+如果你已经有一个 SteamCMD 容器，并且它的挂载关系类似：
+
+```text
+宿主机: /path/to/steamcmd
+容器内: /home/steam
+```
+
+那么这个目录通常会包含：
+
+```text
+/path/to/steamcmd/steamcmd
+/path/to/steamcmd/Steam
+```
+
+可以在 `apps/.env` 里这样配置，让本面板复用已有 SteamCMD 程序、登录态和 workshop cache：
+
+```env
+PANEL_STEAMCMD_INSTALL_SOURCE=/path/to/steamcmd/steamcmd
+PANEL_STEAM_DATA_SOURCE=/path/to/steamcmd/Steam
+```
+
+然后重建服务：
+
+```bash
+cd apps
+docker compose up -d --build
+```
+
+注意不要把完整的 `/path/to/steamcmd` 直接填给 `PANEL_STEAMCMD_INSTALL_SOURCE`。这个变量要指向其中的 `steamcmd` 子目录；`PANEL_STEAM_DATA_SOURCE` 要指向其中的 `Steam` 子目录。
+
+如果你的现有 SteamCMD 容器正在运行下载任务，建议先停止它，避免两个容器同时操作同一套 SteamCMD 和 workshop cache。
 
 ## Jellyfin 与 NFO
 

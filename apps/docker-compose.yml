@@ -21,8 +21,8 @@ services:
     volumes:
       - panel-db:/data
       - panel-downloads:/downloads
-      - steam-home:/home/steam/Steam
-      - steamcmd-install:/home/steam/steamcmd
+      - ${PANEL_STEAM_DATA_SOURCE:-steam-home}:/home/steam/Steam
+      - ${PANEL_STEAMCMD_INSTALL_SOURCE:-steamcmd-install}:/home/steam/steamcmd
     ports:
       - "${PANEL_API_PORT:-3001}:3001"
     restart: unless-stopped
@@ -48,8 +48,8 @@ services:
     volumes:
       - panel-db:/data
       - panel-downloads:/downloads
-      - steam-home:/home/steam/Steam
-      - steamcmd-install:/home/steam/steamcmd
+      - ${PANEL_STEAM_DATA_SOURCE:-steam-home}:/home/steam/Steam
+      - ${PANEL_STEAMCMD_INSTALL_SOURCE:-steamcmd-install}:/home/steam/steamcmd
     restart: unless-stopped
 
   web:
