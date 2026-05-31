@@ -46,8 +46,8 @@ Docker Compose 会启动三个服务：
 ### 2. 克隆项目
 
 ```bash
-git clone <your-repo-url> workshopdl
-cd workshopdl/apps
+git clone https://github.com/ANGJustinl/wallpaper-nas-panel
+cd wallpaper-nas-panel/apps
 ```
 
 ### 3. 创建配置文件

@@ -9,7 +9,7 @@
 ## Docker Compose
 
 1. Copy `.env.example` to `.env` and adjust ports or defaults if needed.
-2. From `C:\Users\77139\Downloads\apps`, run:
+2. From `apps`, run:
 
 ```bash
 docker compose up --build
