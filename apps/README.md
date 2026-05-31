@@ -17,6 +17,26 @@ docker compose up --build
 
 3. Open `http://localhost:8080` by default.
 
+## Deployment Verification
+
+After rebuilding or moving the stack to a NAS, run the smoke check from the repository root:
+
+```bash
+./scripts/verify-deploy.sh
+```
+
+It verifies that `web`, `api`, and `worker` are running, the web UI is served, API health is OK, worker state is readable, `steamcmd` runtime is available, and the content library endpoint responds.
+
+Useful overrides:
+
+```bash
+PANEL_WEB_PORT=8080 PANEL_API_PORT=3001 ./scripts/verify-deploy.sh
+API_URL=http://10.100.1.4:3001 WEB_URL=http://10.100.1.4:8080 ./scripts/verify-deploy.sh
+REQUIRE_STEAMCMD_AVAILABLE=false ./scripts/verify-deploy.sh
+REQUIRE_SUCCESSFUL_TASK=true REQUIRE_LIBRARY_NONEMPTY=true ./scripts/verify-deploy.sh
+REQUIRE_LIBRARY_NONEMPTY=true REQUIRE_NFO=true ./scripts/verify-deploy.sh
+```
+
 ## Volumes
 
 - `panel-db`: shared SQLite database.
@@ -29,3 +49,4 @@ docker compose up --build
 - The API and worker are intentionally split. The API enqueues tasks; the worker claims and executes them.
 - The worker uses the `cm2network/steamcmd` base image and runs `steamcmd.sh` from `/home/steam/steamcmd/steamcmd.sh`.
 - Successful workshop downloads are synchronized into `downloadRoot/<workshopItemId>` so the configured output directory reflects real files instead of metadata only.
+- When `autoGenerateNfo` is enabled, successful downloads and existing library items receive `workshop.nfo` in their content directory.

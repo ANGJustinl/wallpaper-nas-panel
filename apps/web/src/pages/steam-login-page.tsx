@@ -93,7 +93,7 @@ export function SteamLoginPage({ runtime, onBack }: SteamLoginPageProps) {
       <header className="workspace-header workspace-header--page">
         <div>
           <h2>登录到创意工坊</h2>
-          <p className="workspace-header__meta">左边负责登录动作，右边持续显示当前状态、运行时和最近错误。</p>
+          <p className="workspace-header__meta">登录态、运行时和最近错误。</p>
         </div>
         <div className="workspace-header__actions">
           <button type="button" className="signal-button signal-button--secondary signal-button--inline" onClick={() => refreshLoginState()}>
@@ -129,7 +129,7 @@ export function SteamLoginPage({ runtime, onBack }: SteamLoginPageProps) {
           <form className="steam-login-form steam-login-form--tool" onSubmit={handleSubmit}>
             <div className="panel-copy">
               <h3>账号与验证</h3>
-              <p>提交账号、密码和令牌后，状态会自动轮询刷新。</p>
+              <p>提交后会自动刷新登录状态。</p>
             </div>
 
             <div className="steam-login-form__fields">

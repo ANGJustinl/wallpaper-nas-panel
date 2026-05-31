@@ -504,6 +504,13 @@ export function App() {
   const visibleItems = useMemo(() => catalog, [catalog]);
   const enabledFilterCount = useMemo(() => countEnabledFilters(filters), [filters]);
   const activeTaskCount = useMemo(() => tasks.filter((task) => task.status === 'pending' || task.status === 'running').length, [tasks]);
+  const queuedWorkshopItemIds = useMemo(
+    () => tasks
+      .filter((task) => task.status === 'pending' || task.status === 'running')
+      .map((task) => task.workshopItemId),
+    [tasks],
+  );
+  const downloadedWorkshopItemIds = useMemo(() => downloadedContents.map((item) => item.id), [downloadedContents]);
   const downloadCoachSummary = useMemo(() => deriveDownloadCoachSummary(downloadCoach, tasks), [downloadCoach, tasks]);
 
   useEffect(() => {
@@ -700,7 +707,8 @@ export function App() {
   }
 
   function bulkQueueSelected() {
-    void queueItems(visibleItems.filter((item) => selectedIds.includes(item.id)), 'bulk');
+    const activeQueueItemIds = new Set(queuedWorkshopItemIds);
+    void queueItems(visibleItems.filter((item) => selectedIds.includes(item.id) && !activeQueueItemIds.has(item.id)), 'bulk');
   }
 
   function handleQueue(item: WorkshopItemSummary) {
@@ -1003,6 +1011,8 @@ export function App() {
             onRefresh={refreshCatalog}
             notices={exploreNotices}
             queueingItemIds={queueingIds}
+            queuedItemIds={queuedWorkshopItemIds}
+            downloadedItemIds={downloadedWorkshopItemIds}
             isBulkQueueing={isBulkQueueing}
           />
         </section>

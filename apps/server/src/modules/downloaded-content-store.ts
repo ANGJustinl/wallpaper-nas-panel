@@ -103,6 +103,41 @@ export class DownloadedContentStore {
     return result.changes > 0;
   }
 
+  refreshDirectoryFacts(workshopItemId: string, outputPath?: string) {
+    const row = this.database.prepare(
+      `
+        SELECT output_path
+        FROM downloaded_contents
+        WHERE workshop_item_id = ?
+        LIMIT 1
+      `,
+    ).get(workshopItemId) as { output_path: string } | undefined;
+
+    const resolvedOutputPath = outputPath ?? row?.output_path;
+    if (!resolvedOutputPath) {
+      return false;
+    }
+
+    const directoryFacts = inspectDirectory(resolvedOutputPath);
+    const result = this.database.prepare(
+      `
+        UPDATE downloaded_contents
+        SET
+          entry_count = @entry_count,
+          file_count = @file_count,
+          total_bytes = @total_bytes
+        WHERE workshop_item_id = @workshop_item_id
+      `,
+    ).run({
+      workshop_item_id: workshopItemId,
+      entry_count: directoryFacts.entryCount,
+      file_count: directoryFacts.fileCount,
+      total_bytes: directoryFacts.totalBytes,
+    });
+
+    return result.changes > 0;
+  }
+
   backfillFromSucceededTasks(entries: Array<{ task: DownloadTask; workshopItem: WorkshopItemSummary }>) {
     let createdCount = 0;
 

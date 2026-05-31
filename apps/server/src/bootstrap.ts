@@ -1,6 +1,7 @@
 import { type AppContext } from './app-context';
 import { DownloadQueue } from './modules/download-queue';
 import { DownloadedContentStore } from './modules/downloaded-content-store';
+import { writeWorkshopNfo } from './modules/nfo-writer';
 import { createDatabase, migrateDatabase } from './modules/database';
 import { SettingsStore, settingsDefaults } from './modules/settings-store';
 import { SteamCmdAdapter } from './modules/steamcmd-adapter';
@@ -57,6 +58,29 @@ export function seedApplicationData(context: AppContext) {
   context.workerStateStore.seedDefaults();
   seedTaskStore(context.taskStore);
   context.downloadedContentStore.backfillFromSucceededTasks(context.taskStore.listSucceededLibraryCandidates());
+  backfillWorkshopNfo(context);
+}
+
+function backfillWorkshopNfo(context: AppContext) {
+  const settings = context.settingsStore.getSnapshot();
+  if (!settings.autoGenerateNfo) {
+    return;
+  }
+
+  context.downloadedContentStore.listContents().forEach((content) => {
+    try {
+      writeWorkshopNfo({
+        workshopItem: content,
+        outputPath: content.outputPath,
+        downloadedAt: content.downloadedAt,
+        taskId: content.lastTaskId,
+      });
+      context.downloadedContentStore.refreshDirectoryFacts(content.id, content.outputPath);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'unknown NFO error';
+      console.warn(`failed to backfill NFO for workshop item ${content.id}: ${message}`);
+    }
+  });
 }
 
 export function activateDownloadWorker(context: AppContext) {

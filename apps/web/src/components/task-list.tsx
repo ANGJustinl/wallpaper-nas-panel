@@ -27,6 +27,13 @@ export const failureLabel: Record<NonNullable<DownloadTask['failureCode']>, stri
   unknown_error: '未知错误',
 };
 
+const statusToneLabel: Record<DownloadTask['status'], string> = {
+  pending: '排队',
+  running: '活动',
+  succeeded: '完成',
+  failed: '失败',
+};
+
 export function stripAnsi(value: string | undefined) {
   return (value ?? '').replace(/\u001b\[[0-9;]*m/g, '').trim();
 }
@@ -167,7 +174,10 @@ export function TaskList({
             <div className="task-row__main">
               <div className="task-row__titleline">
                 <div>
-                  <p className="task-row__status">{statusLabel[task.status]}</p>
+                  <div className="task-row__statusline">
+                    <p className="task-row__status">{statusLabel[task.status]}</p>
+                    <span>{statusToneLabel[task.status]}</span>
+                  </div>
                   <h3>{task.workshopTitle}</h3>
                 </div>
                 <div className="task-row__meta">

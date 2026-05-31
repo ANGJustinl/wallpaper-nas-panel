@@ -1,7 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
-import type { DownloadTask, DownloadTaskFailureCode, WorkshopItemSummary } from '../../../../packages/shared/src';
+import type {
+  DownloadTask,
+  DownloadTaskFailureCode,
+  SettingsSnapshot,
+  WorkshopItemSummary,
+} from '../../../../packages/shared/src';
 import { DownloadedContentStore } from './downloaded-content-store';
+import { writeWorkshopNfo } from './nfo-writer';
 import { SettingsStore } from './settings-store';
 import { SteamCmdAdapter, type SteamCmdBatchItemExecutionResult, type SteamCmdProgressEvent } from './steamcmd-adapter';
 import { type SteamCmdSocketLockHandle, SteamCmdSocketLock } from './steamcmd-socket-lock';
@@ -154,7 +160,7 @@ export class DownloadQueue {
           continue;
         }
 
-        const failureMessage = await this.finalizeTaskResult(task, itemResult);
+        const failureMessage = await this.finalizeTaskResult(task, itemResult, settings);
         batchLastError ??= failureMessage;
       }
     } catch (error) {
@@ -208,7 +214,11 @@ export class DownloadQueue {
     this.setActiveTask(task);
   }
 
-  private async finalizeTaskResult(task: DownloadTask, itemResult: SteamCmdBatchItemExecutionResult) {
+  private async finalizeTaskResult(
+    task: DownloadTask,
+    itemResult: SteamCmdBatchItemExecutionResult,
+    settings: SettingsSnapshot,
+  ) {
     const finishedAt = new Date().toISOString();
 
     if (itemResult.exitCode === 0) {
@@ -224,12 +234,30 @@ export class DownloadQueue {
 
       const taskWorkshopItem = this.taskStore.getTaskWorkshopItem(task.id);
       if (finishedTask && taskWorkshopItem) {
+        let postProcessFailure: string | undefined;
+
+        if (settings.autoGenerateNfo) {
+          try {
+            writeWorkshopNfo({
+              workshopItem: taskWorkshopItem,
+              outputPath: itemResult.outputPath,
+              downloadedAt: finishedTask.finishedAt,
+              taskId: finishedTask.id,
+            });
+          } catch (error) {
+            const message = error instanceof Error ? error.message : 'NFO 生成失败';
+            postProcessFailure = `NFO 生成失败: ${message}`;
+          }
+        }
+
         try {
           this.downloadedContentStore.recordDownload(finishedTask, taskWorkshopItem, itemResult.outputPath);
         } catch (error) {
           const message = error instanceof Error ? error.message : '内容库记录失败';
-          return `内容库记录失败: ${message}`;
+          return [postProcessFailure, `内容库记录失败: ${message}`].filter(Boolean).join('；');
         }
+
+        return postProcessFailure;
       }
 
       return undefined;

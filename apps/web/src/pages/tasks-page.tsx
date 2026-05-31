@@ -25,6 +25,24 @@ const workerStatusLabel: Record<DownloaderWorkerSnapshot['status'], string> = {
   processing: '处理中',
 };
 
+const activeTaskRank: Record<DownloadTask['status'], number> = {
+  running: 0,
+  pending: 1,
+  failed: 2,
+  succeeded: 3,
+};
+
+const historyTaskRank: Record<DownloadTask['status'], number> = {
+  failed: 0,
+  succeeded: 1,
+  running: 2,
+  pending: 3,
+};
+
+function compareTaskFreshness(left: DownloadTask, right: DownloadTask) {
+  return new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime();
+}
+
 export function TasksPage({
   tasks,
   worker,
@@ -40,8 +58,18 @@ export function TasksPage({
   onDeleteTask,
   onClearHistory,
 }: TasksPageProps) {
-  const runningTasks = useMemo(() => tasks.filter((task) => task.status === 'running' || task.status === 'pending'), [tasks]);
-  const historyTasks = useMemo(() => tasks.filter((task) => task.status === 'succeeded' || task.status === 'failed'), [tasks]);
+  const runningTasks = useMemo(
+    () => tasks
+      .filter((task) => task.status === 'running' || task.status === 'pending')
+      .sort((left, right) => activeTaskRank[left.status] - activeTaskRank[right.status] || compareTaskFreshness(left, right)),
+    [tasks],
+  );
+  const historyTasks = useMemo(
+    () => tasks
+      .filter((task) => task.status === 'succeeded' || task.status === 'failed')
+      .sort((left, right) => historyTaskRank[left.status] - historyTaskRank[right.status] || compareTaskFreshness(left, right)),
+    [tasks],
+  );
   const failedTasks = historyTasks.filter((task) => task.status === 'failed').length;
   const succeededTasks = historyTasks.filter((task) => task.status === 'succeeded').length;
   const workerHeadlineStatus = worker.online
@@ -98,7 +126,7 @@ export function TasksPage({
       <header className="workspace-header workspace-header--page">
         <div>
           <h2>下载任务</h2>
-          <p className="workspace-header__meta">下载链路、失败处理和最近同步集中在一个工作区里。</p>
+          <p className="workspace-header__meta">队列、进度和失败重试。</p>
         </div>
         <div className="workspace-header__actions">
           <button type="button" className="signal-button signal-button--secondary signal-button--inline" onClick={onRefresh}>
@@ -146,20 +174,22 @@ export function TasksPage({
               className={`workspace-segmented__button${viewMode === 'active' ? ' is-active' : ''}`}
               onClick={() => setViewMode('active')}
             >
-              进行中
+              <span>进行中</span>
+              <strong>{runningTasks.length}</strong>
             </button>
             <button
               type="button"
               className={`workspace-segmented__button${viewMode === 'history' ? ' is-active' : ''}`}
               onClick={() => setViewMode('history')}
             >
-              历史
+              <span>历史</span>
+              <strong>{historyTasks.length}</strong>
             </button>
           </div>
 
           <div className="panel-copy">
             <h3>{viewMode === 'active' ? '进行中的任务' : '历史任务'}</h3>
-            <p>{viewMode === 'active' ? '优先看正在下载、等待同步和刚完成整理的任务。' : '失败任务可直接重试，成功和失败记录都能单条删除。'}</p>
+            <p>{viewMode === 'active' ? '正在执行和等待 worker 接管的任务。' : '失败可重试，成功和失败记录可删除。'}</p>
           </div>
 
           <TaskList

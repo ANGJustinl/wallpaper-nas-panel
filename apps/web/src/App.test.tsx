@@ -176,6 +176,19 @@ describe('App shell', () => {
     expect(screen.getAllByText(/Ultrawide 3440 x 1440/i).length).toBeGreaterThan(0);
   });
 
+  it('lets the user remove a downloaded content record', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('link', { name: /内容库/i }));
+    await screen.findByRole('heading', { name: /已下载内容管理/i });
+    await user.click(screen.getByRole('button', { name: /移除记录/i }));
+
+    await waitFor(() => {
+      expect(screen.queryByText(/neon drift corridor/i)).not.toBeInTheDocument();
+    });
+  });
+
   it('surfaces task sync failures instead of silently keeping stale data', async () => {
     const user = userEvent.setup();
     mockApi.failRoute('tasks');

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import type { WorkshopBrowseFilters, WorkshopItemSummary } from '../../../../packages/shared/src';
 import { StatusBanner, type StatusBannerContent } from '../components/status-banner';
-import { WorkshopCard } from '../components/workshop-card';
+import { WorkshopCard, type WorkshopQueueState } from '../components/workshop-card';
 
 interface ExplorePageProps {
   items: WorkshopItemSummary[];
@@ -25,6 +25,8 @@ interface ExplorePageProps {
   onBulkQueue: () => void;
   onQueue: (item: WorkshopItemSummary) => void;
   queueingItemIds: string[];
+  queuedItemIds: string[];
+  downloadedItemIds: string[];
   isBulkQueueing: boolean;
 }
 
@@ -134,6 +136,53 @@ function formatMetadataValue(values: string[] | string) {
   return values || '未记录';
 }
 
+function deriveQueueState(
+  itemId: string,
+  queueingLookup: Set<string>,
+  queuedLookup: Set<string>,
+  downloadedLookup: Set<string>,
+): WorkshopQueueState {
+  if (queueingLookup.has(itemId)) {
+    return 'queueing';
+  }
+
+  if (queuedLookup.has(itemId)) {
+    return 'queued';
+  }
+
+  if (downloadedLookup.has(itemId)) {
+    return 'downloaded';
+  }
+
+  return 'idle';
+}
+
+function queueActionLabel(state: WorkshopQueueState) {
+  switch (state) {
+    case 'queueing':
+      return '加入中';
+    case 'queued':
+      return '队列中';
+    case 'downloaded':
+      return '重新下载';
+    default:
+      return '加入下载';
+  }
+}
+
+function queueStateLabel(state: WorkshopQueueState) {
+  switch (state) {
+    case 'queueing':
+      return '加入下载队列';
+    case 'queued':
+      return '已在任务队列';
+    case 'downloaded':
+      return '已在内容库';
+    default:
+      return null;
+  }
+}
+
 export function ExplorePage({
   items,
   filters,
@@ -156,13 +205,22 @@ export function ExplorePage({
   onBulkQueue,
   onQueue,
   queueingItemIds,
+  queuedItemIds,
+  downloadedItemIds,
   isBulkQueueing,
 }: ExplorePageProps) {
   const selectedCount = selectedIds.length;
   const selectedLookup = useMemo(() => new Set(selectedIds), [selectedIds]);
   const queueingLookup = useMemo(() => new Set(queueingItemIds), [queueingItemIds]);
+  const queuedLookup = useMemo(() => new Set(queuedItemIds), [queuedItemIds]);
+  const downloadedLookup = useMemo(() => new Set(downloadedItemIds), [downloadedItemIds]);
+  const queueableSelectedCount = selectedIds.filter((itemId) => !queueingLookup.has(itemId) && !queuedLookup.has(itemId)).length;
   const resultsTagline = createTagline(filters, items.length);
   const selectedItem = items.find((item) => item.id === selectedItemId) ?? null;
+  const selectedItemQueueState = selectedItem
+    ? deriveQueueState(selectedItem.id, queueingLookup, queuedLookup, downloadedLookup)
+    : 'idle';
+  const selectedItemQueueLocked = selectedItemQueueState === 'queueing' || selectedItemQueueState === 'queued';
   const sidebarRef = useRef<HTMLElement | null>(null);
   const sidebarScrollRef = useRef<HTMLDivElement | null>(null);
   const resultsGridRef = useRef<HTMLDivElement | null>(null);
@@ -328,9 +386,9 @@ export function ExplorePage({
       <aside ref={sidebarRef} className="tool-rail explore-rail">
         <div className="tool-rail__header">
           <div>
-            <p className="tool-rail__eyebrow">筛选面板</p>
-            <h2>筛选条件</h2>
-            <p className="tool-rail__subtitle">筛选条件固定在左侧，方便连续筛、连续看、连续下。</p>
+            <p className="tool-rail__eyebrow">Workshop</p>
+            <h2>筛选</h2>
+            <p className="tool-rail__subtitle">按标签、类型和分辨率收窄结果。</p>
           </div>
           <div className="tool-rail__stats">
             <div>
@@ -503,12 +561,12 @@ export function ExplorePage({
             >
               {isSelectionMode ? '结束选取' : '开始选取'}
             </button>
-            <button className="signal-button signal-button--secondary signal-button--inline" onClick={onSelectAll} disabled={isBulkQueueing}>全选当前页</button>
-            <button className="signal-button signal-button--secondary signal-button--inline" onClick={onClearSelection} disabled={isBulkQueueing}>清空选择</button>
-            <button className="signal-button signal-button--inline" onClick={onBulkQueue} disabled={selectedCount === 0 || isBulkQueueing}>
-              {isBulkQueueing ? '正在加入下载…' : '批量加入下载'}
+            <button className="signal-button signal-button--secondary signal-button--inline" onClick={onSelectAll} disabled={isBulkQueueing}>全选</button>
+            <button className="signal-button signal-button--secondary signal-button--inline" onClick={onClearSelection} disabled={isBulkQueueing}>清空</button>
+            <button className="signal-button signal-button--inline" aria-label="批量加入下载" onClick={onBulkQueue} disabled={queueableSelectedCount === 0 || isBulkQueueing}>
+              {isBulkQueueing ? '加入中…' : '加入下载'}
             </button>
-            <button className="signal-button signal-button--ghost signal-button--inline" onClick={onViewTasks}>任务页</button>
+            <button className="signal-button signal-button--ghost signal-button--inline" onClick={onViewTasks}>任务</button>
           </div>
         </div>
 
@@ -517,7 +575,7 @@ export function ExplorePage({
             compact
             tone="info"
             title="框选模式已开启"
-            detail="在结果区拖拽即可批量选择，继续支持 Ctrl/Cmd 追加和 Shift 连选。"
+            detail="拖拽选择项目，Esc 退出。"
           />
         ) : null}
 
@@ -538,7 +596,8 @@ export function ExplorePage({
                 inspected={item.id === selectedItemId}
                 onInspect={onInspectItem}
                 onQueue={onQueue}
-                queueDisabled={queueingLookup.has(item.id)}
+                queueDisabled={queuedLookup.has(item.id) || queueingLookup.has(item.id)}
+                queueState={deriveQueueState(item.id, queueingLookup, queuedLookup, downloadedLookup)}
                 selected={selectedLookup.has(item.id)}
                 onToggleSelect={onToggleSelect}
               />
@@ -574,9 +633,12 @@ export function ExplorePage({
           </div>
 
           <div className="inspector-header">
-            <p className="inspector-label">已选项目</p>
+            <p className="inspector-label">详情</p>
             <h3>{selectedItem.title}</h3>
             <p>{selectedItem.author}</p>
+            {queueStateLabel(selectedItemQueueState) ? (
+              <span className={`state-pill state-pill--${selectedItemQueueState}`}>{queueStateLabel(selectedItemQueueState)}</span>
+            ) : null}
           </div>
 
           <div className="inspector-actions">
@@ -584,9 +646,9 @@ export function ExplorePage({
               type="button"
               className="signal-button signal-button--inline"
               onClick={() => onQueue(selectedItem)}
-              disabled={queueingLookup.has(selectedItem.id)}
+              disabled={selectedItemQueueLocked}
             >
-              {queueingLookup.has(selectedItem.id) ? '正在加入…' : '加入下载'}
+              {queueActionLabel(selectedItemQueueState)}
             </button>
             <a
               className="signal-button signal-button--ghost signal-button--inline"

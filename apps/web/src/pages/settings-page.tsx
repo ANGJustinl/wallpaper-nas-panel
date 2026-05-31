@@ -55,7 +55,7 @@ export function SettingsPage({ settings, runtime, isRefreshing, notices, onSetti
       <header className="workspace-header workspace-header--page">
         <div>
           <h2>运行参数</h2>
-          <p className="workspace-header__meta">配置写入、代理设置和运行时状态保持在同一个工作面里。</p>
+          <p className="workspace-header__meta">账号、目录、代理和 worker 状态。</p>
         </div>
         <div className="workspace-header__actions">
           <button type="button" className="signal-button signal-button--secondary signal-button--inline" onClick={onRefresh}>
@@ -69,7 +69,7 @@ export function SettingsPage({ settings, runtime, isRefreshing, notices, onSetti
           <div className="settings-group">
             <div className="panel-copy">
               <h3>账户与目录</h3>
-              <p>下载账号和输出路径会直接影响 worker 后续行为。</p>
+              <p>worker 会按这里的账号和路径执行下载。</p>
             </div>
             <div className="settings-form-grid">
               <label className="settings-grid__field">
@@ -86,7 +86,7 @@ export function SettingsPage({ settings, runtime, isRefreshing, notices, onSetti
           <div className="settings-group">
             <div className="panel-copy">
               <h3>抓取与生成</h3>
-              <p>抓取语言、节流和自动生成行为统一放在这一组里。</p>
+              <p>控制元数据语言、请求间隔和 NFO 生成。</p>
             </div>
             <div className="settings-form-grid">
               <label className="settings-grid__field">
@@ -116,7 +116,7 @@ export function SettingsPage({ settings, runtime, isRefreshing, notices, onSetti
           <div className="settings-group">
             <div className="panel-copy">
               <h3>代理与连通性</h3>
-              <p>下载器和抓取链路会使用这里的代理设置。</p>
+              <p>抓取与 steamcmd 共用这里的代理设置。</p>
             </div>
             <div className="settings-form-grid">
               <label className="settings-grid__checkbox">

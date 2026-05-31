@@ -9,18 +9,21 @@ interface WorkshopCardProps {
   item: WorkshopItemSummary;
   selected: boolean;
   inspected?: boolean;
+  queueState?: WorkshopQueueState;
   queueDisabled?: boolean;
   onInspect?: (itemId: string) => void;
   onToggleSelect: (itemId: string, intent?: SelectionIntent) => void;
   onQueue: (item: WorkshopItemSummary) => void;
 }
 
+export type WorkshopQueueState = 'idle' | 'queueing' | 'queued' | 'downloaded';
+
 function formatRating(value: number) {
   if (value <= 0) {
     return '未评分';
   }
 
-  return `${value.toFixed(1)} / 5`;
+  return value.toFixed(1);
 }
 
 function isSelectionControl(target: EventTarget | null) {
@@ -49,19 +52,51 @@ function formatMetadataSummary(item: WorkshopItemSummary) {
   return segments.length ? segments.join(' · ') : '工坊项目';
 }
 
+function queueStateLabel(state: WorkshopQueueState) {
+  switch (state) {
+    case 'queueing':
+      return '加入中';
+    case 'queued':
+      return '队列中';
+    case 'downloaded':
+      return '已入库';
+    default:
+      return null;
+  }
+}
+
+function queueActionLabel(state: WorkshopQueueState) {
+  switch (state) {
+    case 'queueing':
+      return '加入中';
+    case 'queued':
+      return '队列中';
+    case 'downloaded':
+      return '重新下载';
+    default:
+      return '加入下载';
+  }
+}
+
 export function WorkshopCard({
   item,
   selected,
   inspected = false,
+  queueState = 'idle',
   queueDisabled = false,
   onInspect,
   onToggleSelect,
   onQueue,
 }: WorkshopCardProps) {
+  const stateLabel = queueStateLabel(queueState);
+  const actionLabel = queueActionLabel(queueState);
+  const isQueueLocked = queueState === 'queueing' || queueState === 'queued' || queueDisabled;
+
   return (
     <article
-      className={`workshop-row${selected ? ' workshop-row--selected' : ''}${inspected ? ' workshop-row--inspected' : ''}`}
+      className={`workshop-row workshop-row--${queueState}${selected ? ' workshop-row--selected' : ''}${inspected ? ' workshop-row--inspected' : ''}`}
       data-workshop-item-id={item.id}
+      aria-busy={queueState === 'queueing'}
       onClick={(event) => {
         if (isDownloadButton(event.target) || isSelectionControl(event.target)) {
           return;
@@ -87,18 +122,24 @@ export function WorkshopCard({
             <span>{item.title.slice(0, 18)}</span>
           </div>
         )}
+        <div className="workshop-row__badges" aria-hidden="true">
+          {selected ? <span className="workshop-row__badge workshop-row__badge--selected">已选</span> : null}
+          {inspected ? <span className="workshop-row__badge workshop-row__badge--inspected">查看中</span> : null}
+          {stateLabel ? <span className={`workshop-row__badge workshop-row__badge--${queueState}`}>{stateLabel}</span> : null}
+        </div>
       </div>
 
       <div className="workshop-row__main">
         <div className="workshop-row__titleline">
           <h3>{item.title}</h3>
-          <span className="workshop-row__rating">{formatRating(item.rating)}</span>
+          <span className="workshop-row__rating" title={item.rating > 0 ? `${item.rating.toFixed(1)} / 5` : '未评分'}>
+            {formatRating(item.rating)}
+          </span>
         </div>
         <p className="workshop-row__meta">作者 {item.author} · {formatMetadataSummary(item)}</p>
-        <p className="workshop-row__description">{item.description}</p>
         {item.tags.length ? (
           <ul className="workshop-row__tags" aria-label={`${item.title} 标签`}>
-            {item.tags.slice(0, 5).map((tag) => (
+            {item.tags.slice(0, 3).map((tag) => (
               <li key={tag}>{tag}</li>
             ))}
           </ul>
@@ -124,15 +165,15 @@ export function WorkshopCard({
         <button
           type="button"
           className="signal-button signal-button--inline"
-          aria-label={`下载 ${item.title}`}
-          title={`下载 ${item.title}`}
-          disabled={queueDisabled}
+          aria-label={`${actionLabel} ${item.title}`}
+          title={`${actionLabel} ${item.title}`}
+          disabled={isQueueLocked}
           onClick={(event) => {
             event.stopPropagation();
             onQueue(item);
           }}
         >
-          {queueDisabled ? '正在加入…' : '加入下载'}
+          {actionLabel}
         </button>
       </div>
     </article>

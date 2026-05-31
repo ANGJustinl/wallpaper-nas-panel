@@ -99,7 +99,7 @@ export function ContentPage({
       <header className="workspace-header workspace-header--page">
         <div>
           <h2>已下载内容管理</h2>
-          <p className="workspace-header__meta">像资源管理器一样浏览已下载项目，并在右侧固定查看 metadata 和本地信息。</p>
+          <p className="workspace-header__meta">已下载项目、目录和 metadata。</p>
         </div>
         <div className="workspace-header__actions">
           <div className="compact-stat">
@@ -120,7 +120,7 @@ export function ContentPage({
         <section className="workspace-panel workspace-panel--main">
           <div className="panel-copy">
             <h3>内容列表</h3>
-            <p>左侧专注浏览与选择，详情与本地路径固定停在右侧检查器。</p>
+            <p>选择项目后在右侧查看路径与元数据。</p>
           </div>
 
           {items.length ? (
