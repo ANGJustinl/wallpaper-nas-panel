@@ -16,6 +16,14 @@ function createSettings(downloadRoot: string): SettingsSnapshot {
     metadataLanguage: 'en-US',
     requestIntervalMs: 1000,
     autoGenerateNfo: true,
+    mediaLibrary: {
+      jellyfinSidecars: true,
+      videoOnlySidecars: true,
+      preserveExistingSidecars: true,
+    },
+    contentLibrary: {
+      deleteFilesDefault: false,
+    },
     proxy: {
       enabled: false,
       url: '',

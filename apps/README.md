@@ -31,10 +31,11 @@ Useful overrides:
 
 ```bash
 PANEL_WEB_PORT=8080 PANEL_API_PORT=3001 ./scripts/verify-deploy.sh
-API_URL=http://10.100.1.4:3001 WEB_URL=http://10.100.1.4:8080 ./scripts/verify-deploy.sh
+API_URL=http://127.0.0.1:3001 WEB_URL=http://127.0.0.1:8080 ./scripts/verify-deploy.sh
 REQUIRE_STEAMCMD_AVAILABLE=false ./scripts/verify-deploy.sh
 REQUIRE_SUCCESSFUL_TASK=true REQUIRE_LIBRARY_NONEMPTY=true ./scripts/verify-deploy.sh
 REQUIRE_LIBRARY_NONEMPTY=true REQUIRE_NFO=true ./scripts/verify-deploy.sh
+REQUIRE_LIBRARY_NONEMPTY=true REQUIRE_JELLYFIN_SIDECARS=true ./scripts/verify-deploy.sh
 ```
 
 ## Volumes
@@ -49,4 +50,4 @@ REQUIRE_LIBRARY_NONEMPTY=true REQUIRE_NFO=true ./scripts/verify-deploy.sh
 - The API and worker are intentionally split. The API enqueues tasks; the worker claims and executes them.
 - The worker uses the `cm2network/steamcmd` base image and runs `steamcmd.sh` from `/home/steam/steamcmd/steamcmd.sh`.
 - Successful workshop downloads are synchronized into `downloadRoot/<workshopItemId>` so the configured output directory reflects real files instead of metadata only.
-- When `autoGenerateNfo` is enabled, successful downloads and existing library items receive `workshop.nfo` in their content directory.
+- When `autoGenerateNfo` is enabled, successful downloads and existing library items receive `workshop.nfo`; video items can also receive Jellyfin-friendly `movie.nfo`, `poster.jpg`, and `folder.jpg`.

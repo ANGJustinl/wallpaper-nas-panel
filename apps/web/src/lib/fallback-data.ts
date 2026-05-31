@@ -42,6 +42,17 @@ export const fallbackDownloadedContents: DownloadedContentItem[] = [
     fileCount: 9,
     totalBytes: 158472913,
     lastTaskId: 'task-3648823629',
+    libraryHealth: {
+      pathExists: true,
+      playableFileCount: 0,
+      workshopNfoExists: true,
+      jellyfinSidecarsStatus: 'not_applicable',
+      jellyfinSidecars: {
+        movieNfoExists: false,
+        posterExists: false,
+        folderExists: false,
+      },
+    },
   },
 ];
 
@@ -51,8 +62,16 @@ export const fallbackSettings: SettingsSnapshot = {
   metadataLanguage: 'en-US',
   requestIntervalMs: 1250,
   autoGenerateNfo: true,
+  mediaLibrary: {
+    jellyfinSidecars: true,
+    videoOnlySidecars: true,
+    preserveExistingSidecars: true,
+  },
+  contentLibrary: {
+    deleteFilesDefault: false,
+  },
   proxy: {
     enabled: true,
-    url: 'http://10.100.1.4:7890',
+    url: 'http://127.0.0.1:7890',
   },
 };

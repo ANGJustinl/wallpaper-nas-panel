@@ -32,6 +32,7 @@ app.delete('/api/tasks/history', taskRoutes.clearHistory);
 app.delete('/api/tasks/:id', taskRoutes.deleteTask);
 app.post('/api/tasks/:id/retry', taskRoutes.retryTask);
 app.get('/api/library', downloadedContentRoutes.listContents);
+app.post('/api/library/rescan', downloadedContentRoutes.rescanContents);
 app.delete('/api/library/:id', downloadedContentRoutes.deleteContent);
 app.get('/api/settings', settingsRoutes.getSettings);
 app.patch('/api/settings', settingsRoutes.updateSettings);

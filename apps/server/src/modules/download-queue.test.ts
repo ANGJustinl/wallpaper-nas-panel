@@ -117,6 +117,14 @@ test('DownloadQueue writes NFO when a queued download succeeds', async () => {
     steamAccountName: 'tester',
     downloadRoot,
     autoGenerateNfo: true,
+    mediaLibrary: {
+      jellyfinSidecars: true,
+      videoOnlySidecars: true,
+      preserveExistingSidecars: true,
+    },
+    contentLibrary: {
+      deleteFilesDefault: false,
+    },
     proxy: {
       enabled: false,
       url: '',
@@ -127,6 +135,8 @@ test('DownloadQueue writes NFO when a queued download succeeds', async () => {
   const sourcePath = resolve(config.workshopContentDir, workshopItem.id);
   mkdirSync(sourcePath, { recursive: true });
   writeFileSync(resolve(sourcePath, 'project.json'), '{"title":"Queue Test Wallpaper"}', 'utf8');
+  writeFileSync(resolve(sourcePath, 'preview.jpg'), 'image', 'utf8');
+  writeFileSync(resolve(sourcePath, 'loop.mp4'), 'video', 'utf8');
 
   const adapter = new SteamCmdAdapter(
     config,
@@ -152,10 +162,15 @@ test('DownloadQueue writes NFO when a queued download succeeds', async () => {
     const nfoPath = resolve(downloadRoot, workshopItem.id, WORKSHOP_NFO_FILENAME);
     assert.equal(existsSync(nfoPath), true);
     assert.match(readFileSync(nfoPath, 'utf8'), /<uniqueid type="steam_workshop" default="true">111<\/uniqueid>/);
+    assert.equal(existsSync(resolve(downloadRoot, workshopItem.id, 'movie.nfo')), true);
+    assert.equal(existsSync(resolve(downloadRoot, workshopItem.id, 'poster.jpg')), true);
+    assert.equal(existsSync(resolve(downloadRoot, workshopItem.id, 'folder.jpg')), true);
 
     const content = downloadedContentStore.listContents()[0];
     assert.equal(content?.id, workshopItem.id);
-    assert.equal(content?.fileCount, 2);
+    assert.equal(content?.fileCount, 7);
+    assert.equal(content?.libraryHealth.playableFileCount, 1);
+    assert.equal(content?.libraryHealth.jellyfinSidecarsStatus, 'ready');
   } finally {
     queue.stopWorkerLoop('test done');
   }

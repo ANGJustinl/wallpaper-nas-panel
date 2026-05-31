@@ -5,7 +5,7 @@ import { App } from './App';
 
 const mockApi = (globalThis as typeof globalThis & {
   __panelMockApi: {
-    failRoute: (route: 'workshop' | 'tasks' | 'library' | 'settings' | 'createTask' | 'retryTask' | 'deleteTask' | 'deleteDownloadedContent' | 'clearTaskHistory' | 'steamLoginState' | 'steamLogin') => void;
+    failRoute: (route: 'workshop' | 'tasks' | 'library' | 'settings' | 'createTask' | 'retryTask' | 'deleteTask' | 'deleteDownloadedContent' | 'rescanDownloadedContents' | 'clearTaskHistory' | 'steamLoginState' | 'steamLogin') => void;
     reset: () => void;
   };
 }).__panelMockApi;
@@ -176,17 +176,69 @@ describe('App shell', () => {
     expect(screen.getAllByText(/Ultrawide 3440 x 1440/i).length).toBeGreaterThan(0);
   });
 
-  it('lets the user remove a downloaded content record', async () => {
+  it('lets the user remove a downloaded content record while keeping files by default', async () => {
     const user = userEvent.setup();
     render(<App />);
 
     await user.click(screen.getByRole('link', { name: /内容库/i }));
     await screen.findByRole('heading', { name: /已下载内容管理/i });
     await user.click(screen.getByRole('button', { name: /移除记录/i }));
+    expect(screen.getByRole('dialog', { name: /确认移除内容/i })).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: /同时删除本地文件/i })).not.toBeChecked();
+    await user.click(screen.getByRole('button', { name: /确认移除/i }));
 
     await waitFor(() => {
       expect(screen.queryByText(/neon drift corridor/i)).not.toBeInTheDocument();
     });
+
+    const deleteRequest = vi.mocked(globalThis.fetch).mock.calls
+      .map(([input]) => String(input))
+      .find((value) => value.includes('/api/library/3648823629'));
+    expect(deleteRequest).toBeDefined();
+    expect(deleteRequest).not.toContain('deleteFiles=true');
+  });
+
+  it('can delete local files from the content removal confirmation', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('link', { name: /内容库/i }));
+    await screen.findByRole('heading', { name: /已下载内容管理/i });
+    await user.click(screen.getByRole('button', { name: /移除记录/i }));
+    await user.click(screen.getByRole('checkbox', { name: /同时删除本地文件/i }));
+    await user.click(screen.getByRole('button', { name: /确认移除/i }));
+
+    await waitFor(() => {
+      const deleteRequest = vi.mocked(globalThis.fetch).mock.calls
+        .map(([input]) => String(input))
+        .find((value) => value.includes('/api/library/3648823629'));
+      expect(deleteRequest).toContain('deleteFiles=true');
+    });
+  });
+
+  it('rescans the content library and surfaces a success summary', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('link', { name: /内容库/i }));
+    await screen.findByRole('heading', { name: /已下载内容管理/i });
+    await user.click(screen.getByRole('button', { name: /重扫\/校验/i }));
+
+    expect(await screen.findByText(/内容库已更新/i)).toBeInTheDocument();
+    expect(screen.getByText(/更新 1 个项目/i)).toBeInTheDocument();
+  });
+
+  it('shows an error when content library rescan fails', async () => {
+    const user = userEvent.setup();
+    mockApi.failRoute('rescanDownloadedContents');
+    render(<App />);
+
+    await user.click(screen.getByRole('link', { name: /内容库/i }));
+    await screen.findByRole('heading', { name: /已下载内容管理/i });
+    await user.click(screen.getByRole('button', { name: /重扫\/校验/i }));
+
+    expect(await screen.findByText(/内容记录操作失败/i)).toBeInTheDocument();
+    expect(screen.getByText(/内容库重扫失败/i)).toBeInTheDocument();
   });
 
   it('surfaces task sync failures instead of silently keeping stale data', async () => {
@@ -203,15 +255,23 @@ describe('App shell', () => {
   it('lets the user edit and save downloader settings', async () => {
     const user = userEvent.setup();
     render(<App />);
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockClear();
 
     await user.click(screen.getByRole('link', { name: /设置/i }));
     await user.clear(screen.getByDisplayValue('/data/downloads/431960'));
     await user.type(screen.getByLabelText(/下载目录/i), '/volume1/wallpapers');
     await user.clear(screen.getByDisplayValue('1250'));
     await user.type(screen.getByLabelText(/请求间隔/i), '2000');
+    await user.click(screen.getByRole('checkbox', { name: /生成 Jellyfin 兼容旁挂文件/i }));
+    await user.click(screen.getByRole('checkbox', { name: /删除确认默认勾选本地文件/i }));
     await user.click(screen.getByRole('button', { name: /保存全部设置/i }));
 
     expect(await screen.findByText(/设置已同步到后端/i)).toBeInTheDocument();
+    const settingsRequest = fetchMock.mock.calls.find(([input, init]) => String(input).includes('/api/settings') && init?.method === 'PATCH');
+    const payload = JSON.parse(String(settingsRequest?.[1]?.body ?? '{}'));
+    expect(payload.mediaLibrary.jellyfinSidecars).toBe(false);
+    expect(payload.contentLibrary.deleteFilesDefault).toBe(true);
   });
 
   it('shows an error when queueing a task fails', async () => {

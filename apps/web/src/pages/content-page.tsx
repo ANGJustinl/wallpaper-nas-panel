@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import type { DownloadedContentItem } from '../../../../packages/shared/src';
 import { StatusBanner, type StatusBannerContent } from '../components/status-banner';
 
@@ -6,13 +7,16 @@ interface ContentPageProps {
   selectedItemId: string | null;
   deletingItemId: string | null;
   isLoading: boolean;
+  isRescanning: boolean;
   lastSyncedAt: string | null;
   notices: StatusBannerContent[];
   queueingItemIds: string[];
+  deleteFilesDefault: boolean;
   onRefresh: () => void;
+  onRescan: () => void;
   onSelect: (itemId: string) => void;
   onQueue: (item: DownloadedContentItem) => void;
-  onDeleteRecord: (itemId: string) => void;
+  onDeleteRecord: (itemId: string, deleteFiles: boolean) => void;
 }
 
 function ContentPreview({ item, className }: { item: DownloadedContentItem; className: string }) {
@@ -60,21 +64,57 @@ function formatMetadataValue(values: string[] | string) {
   return values || '未记录';
 }
 
+function jellyfinStatusLabel(item: DownloadedContentItem) {
+  switch (item.libraryHealth.jellyfinSidecarsStatus) {
+    case 'ready':
+      return 'Jellyfin 就绪';
+    case 'missing':
+      return 'Jellyfin 缺失';
+    case 'not_applicable':
+      return item.libraryHealth.playableFileCount > 0 ? 'Jellyfin 未启用' : '非视频';
+  }
+}
+
+function healthStateLabel(value: boolean, readyLabel: string, missingLabel: string) {
+  return value ? readyLabel : missingLabel;
+}
+
+function healthClass(value: boolean) {
+  return value ? 'content-health__pill--ready' : 'content-health__pill--missing';
+}
+
+function jellyfinHealthClass(item: DownloadedContentItem) {
+  if (item.libraryHealth.jellyfinSidecarsStatus === 'ready') {
+    return 'content-health__pill--ready';
+  }
+
+  if (item.libraryHealth.jellyfinSidecarsStatus === 'missing') {
+    return 'content-health__pill--missing';
+  }
+
+  return 'content-health__pill--neutral';
+}
+
 export function ContentPage({
   items,
   selectedItemId,
   deletingItemId,
   isLoading,
+  isRescanning,
   lastSyncedAt,
   notices,
   queueingItemIds,
+  deleteFilesDefault,
   onRefresh,
+  onRescan,
   onSelect,
   onQueue,
   onDeleteRecord,
 }: ContentPageProps) {
   const selectedItem = items.find((item) => item.id === selectedItemId) ?? items[0] ?? null;
   const queueingLookup = new Set(queueingItemIds);
+  const [deleteCandidate, setDeleteCandidate] = useState<DownloadedContentItem | null>(null);
+  const [deleteFiles, setDeleteFiles] = useState(deleteFilesDefault);
   const metadataRows = selectedItem
     ? [
         ['Miscellaneous', formatMetadataValue(selectedItem.metadata.miscellaneous)],
@@ -85,6 +125,10 @@ export function ContentPage({
         ['Category', formatMetadataValue(selectedItem.metadata.category)],
       ]
     : [];
+
+  useEffect(() => {
+    setDeleteFiles(deleteFilesDefault);
+  }, [deleteFilesDefault, deleteCandidate?.id]);
 
   return (
     <section className="content-layout">
@@ -112,6 +156,9 @@ export function ContentPage({
           </div>
           <button type="button" className="signal-button signal-button--secondary signal-button--inline" onClick={onRefresh}>
             {isLoading ? '刷新中…' : '重新读取'}
+          </button>
+          <button type="button" className="signal-button signal-button--inline" onClick={onRescan} disabled={isRescanning}>
+            {isRescanning ? '重扫中…' : '重扫/校验'}
           </button>
         </div>
       </header>
@@ -151,6 +198,17 @@ export function ContentPage({
                       </div>
                       <p className="content-row__meta">作者 {item.author} · {item.downloadedAt}</p>
                       <p className="content-row__stats">{formatBytes(item.totalBytes)} · {item.fileCount} 个文件 · {item.entryCount} 个目录项</p>
+                      <div className="content-health" aria-label={`${item.title} 内容状态`}>
+                        <span className={`content-health__pill ${healthClass(item.libraryHealth.pathExists)}`}>
+                          {healthStateLabel(item.libraryHealth.pathExists, '文件存在', '路径缺失')}
+                        </span>
+                        <span className={`content-health__pill ${healthClass(item.libraryHealth.workshopNfoExists)}`}>
+                          {healthStateLabel(item.libraryHealth.workshopNfoExists, 'NFO 已生成', 'NFO 缺失')}
+                        </span>
+                        <span className={`content-health__pill ${jellyfinHealthClass(item)}`}>
+                          {jellyfinStatusLabel(item)}
+                        </span>
+                      </div>
                       <ul className="workshop-row__tags" aria-label={`${item.title} 标签`}>
                         {item.tags.slice(0, 4).map((tag) => (
                           <li key={tag}>{tag}</li>
@@ -201,12 +259,48 @@ export function ContentPage({
                 <button
                   type="button"
                   className="signal-button signal-button--ghost signal-button--inline"
-                  onClick={() => onDeleteRecord(selectedItem.id)}
+                  onClick={() => setDeleteCandidate(selectedItem)}
                   disabled={deletingItemId === selectedItem.id}
                 >
                   {deletingItemId === selectedItem.id ? '移除中…' : '移除记录'}
                 </button>
               </div>
+
+              {deleteCandidate ? (
+                <div className="content-delete-confirm" role="dialog" aria-label="确认移除内容">
+                  <div>
+                    <h4>移除《{deleteCandidate.title}》？</h4>
+                    <p>默认只移除面板记录。本地下载目录会保留，除非勾选同时删除文件。</p>
+                  </div>
+                  <label className="settings-grid__checkbox">
+                    <input
+                      type="checkbox"
+                      checked={deleteFiles}
+                      onChange={(event) => setDeleteFiles(event.target.checked)}
+                    />
+                    <span>同时删除本地文件</span>
+                  </label>
+                  <div className="content-delete-confirm__actions">
+                    <button
+                      type="button"
+                      className="signal-button signal-button--ghost signal-button--inline"
+                      onClick={() => setDeleteCandidate(null)}
+                    >
+                      取消
+                    </button>
+                    <button
+                      type="button"
+                      className="signal-button signal-button--inline"
+                      onClick={() => {
+                        onDeleteRecord(deleteCandidate.id, deleteFiles);
+                        setDeleteCandidate(null);
+                      }}
+                    >
+                      确认移除
+                    </button>
+                  </div>
+                </div>
+              ) : null}
 
               <dl className="inspector-facts">
                 <div>
@@ -228,6 +322,22 @@ export function ContentPage({
                 <div>
                   <dt>总大小</dt>
                   <dd>{formatBytes(selectedItem.totalBytes)}</dd>
+                </div>
+                <div>
+                  <dt>路径状态</dt>
+                  <dd>{selectedItem.libraryHealth.pathExists ? '存在' : '缺失'}</dd>
+                </div>
+                <div>
+                  <dt>可播放文件</dt>
+                  <dd>{selectedItem.libraryHealth.playableFileCount}</dd>
+                </div>
+                <div>
+                  <dt>归档 NFO</dt>
+                  <dd>{selectedItem.libraryHealth.workshopNfoExists ? '已生成' : '缺失'}</dd>
+                </div>
+                <div>
+                  <dt>Jellyfin 旁挂</dt>
+                  <dd>{jellyfinStatusLabel(selectedItem)}</dd>
                 </div>
                 <div>
                   <dt>工坊页面</dt>

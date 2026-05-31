@@ -1,4 +1,6 @@
 import type {
+  ContentLibraryDeleteResponse,
+  ContentLibraryRescanResponse,
   CreateTaskResponse,
   DownloadedContentsResponse,
   RetryTaskResponse,
@@ -161,8 +163,15 @@ export function clearTaskHistory() {
   });
 }
 
-export function deleteDownloadedContent(workshopItemId: string) {
-  return readJson<{ ok: boolean }>(`/api/library/${workshopItemId}`, {
+export function deleteDownloadedContent(workshopItemId: string, deleteFiles = false) {
+  const suffix = deleteFiles ? '?deleteFiles=true' : '';
+  return readJson<ContentLibraryDeleteResponse>(`/api/library/${workshopItemId}${suffix}`, {
     method: 'DELETE',
+  });
+}
+
+export function rescanDownloadedContents() {
+  return readJson<ContentLibraryRescanResponse>('/api/library/rescan', {
+    method: 'POST',
   });
 }

@@ -25,6 +25,14 @@ export function createSettingsRoutes(context: AppContext) {
     const next: SettingsSnapshot = {
       ...current,
       ...patch,
+      mediaLibrary: {
+        ...current.mediaLibrary,
+        ...patch.mediaLibrary,
+      },
+      contentLibrary: {
+        ...current.contentLibrary,
+        ...patch.contentLibrary,
+      },
       proxy: {
         ...current.proxy,
         ...patch.proxy,

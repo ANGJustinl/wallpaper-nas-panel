@@ -9,6 +9,7 @@ REQUIRE_STEAMCMD_AVAILABLE="${REQUIRE_STEAMCMD_AVAILABLE:-true}"
 REQUIRE_SUCCESSFUL_TASK="${REQUIRE_SUCCESSFUL_TASK:-false}"
 REQUIRE_LIBRARY_NONEMPTY="${REQUIRE_LIBRARY_NONEMPTY:-false}"
 REQUIRE_NFO="${REQUIRE_NFO:-false}"
+REQUIRE_JELLYFIN_SIDECARS="${REQUIRE_JELLYFIN_SIDECARS:-false}"
 
 required_services=(web api worker)
 
@@ -104,11 +105,37 @@ if [[ "$REQUIRE_NFO" == "true" ]]; then
 
   while IFS=$'\t' read -r item_id output_path; do
     [[ -n "$item_id" ]] || continue
-    docker compose -f "$COMPOSE_FILE" exec -T api sh -lc 'test -f "$1/workshop.nfo"' sh "$output_path" \
+    docker compose -f "$COMPOSE_FILE" exec -T api sh -lc 'test -f "$1/workshop.nfo"' sh "$output_path" < /dev/null \
       || fail "missing NFO for library item $item_id: $output_path/workshop.nfo"
   done <<< "$nfo_items"
 
   pass "NFO files present for downloaded contents"
+fi
+
+if [[ "$REQUIRE_JELLYFIN_SIDECARS" == "true" ]]; then
+  require_command node
+  sidecar_items="$(JSON_PAYLOAD="$library_json" node -e '
+    const payload = JSON.parse(process.env.JSON_PAYLOAD || "{}");
+    const items = Array.isArray(payload.items) ? payload.items : [];
+    if (items.length === 0) process.exit(2);
+    for (const item of items) {
+      if (!item.id || !item.outputPath) process.exit(3);
+      console.log(`${item.id}\t${item.outputPath}`);
+    }
+  ')" || fail "library has no downloadable content paths for Jellyfin sidecar verification"
+
+  video_item_count=0
+  while IFS=$'\t' read -r item_id output_path; do
+    [[ -n "$item_id" ]] || continue
+    if docker compose -f "$COMPOSE_FILE" exec -T api sh -lc 'find "$1" -type f \( -iname "*.mp4" -o -iname "*.webm" -o -iname "*.mkv" -o -iname "*.mov" -o -iname "*.m4v" -o -iname "*.avi" \) | grep -q .' sh "$output_path" < /dev/null; then
+      video_item_count=$((video_item_count + 1))
+      docker compose -f "$COMPOSE_FILE" exec -T api sh -lc 'test -f "$1/movie.nfo" && test -f "$1/poster.jpg"' sh "$output_path" < /dev/null \
+        || fail "missing Jellyfin sidecars for video library item $item_id: $output_path"
+    fi
+  done <<< "$sidecar_items"
+
+  [[ "$video_item_count" -gt 0 ]] || fail "no video library items found for Jellyfin sidecar verification"
+  pass "Jellyfin sidecars present for video downloaded contents"
 fi
 
 printf '\nDeployment verification passed.\n'

@@ -1,7 +1,8 @@
-import { existsSync, readdirSync, statSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { basename, resolve } from 'node:path';
+import { existsSync, readdirSync, rmSync, statSync } from 'node:fs';
 import type { DownloadTask, DownloadedContentItem, WorkshopItemSummary } from '../../../../packages/shared/src';
 import type Database from 'better-sqlite3';
+import { inspectContentLibraryHealth } from './nfo-writer';
 import { createEmptyWorkshopMetadata, normalizeWorkshopMetadata } from './workshop-item-metadata';
 
 interface DownloadedContentRow {
@@ -66,6 +67,20 @@ function inspectDirectory(outputPath: string) {
   return { entryCount, fileCount, totalBytes };
 }
 
+function removeOutputDirectory(workshopItemId: string, outputPath: string) {
+  const resolvedPath = resolve(outputPath);
+  if (!existsSync(resolvedPath)) {
+    return false;
+  }
+
+  if (resolvedPath === '/' || basename(resolvedPath) !== workshopItemId) {
+    throw new Error(`Refusing to delete unsafe content path: ${outputPath}`);
+  }
+
+  rmSync(resolvedPath, { recursive: true, force: true });
+  return true;
+}
+
 export class DownloadedContentStore {
   constructor(private readonly database: Database.Database) {}
 
@@ -98,9 +113,23 @@ export class DownloadedContentStore {
     return rows.map((row) => this.toItem(row));
   }
 
-  deleteContent(workshopItemId: string) {
+  deleteContent(workshopItemId: string, options: { deleteFiles?: boolean } = {}) {
+    const row = this.database.prepare(
+      `
+        SELECT output_path
+        FROM downloaded_contents
+        WHERE workshop_item_id = ?
+        LIMIT 1
+      `,
+    ).get(workshopItemId) as { output_path: string } | undefined;
+
+    if (!row) {
+      return { recordDeleted: false, deletedFiles: false };
+    }
+
+    const deletedFiles = options.deleteFiles ? removeOutputDirectory(workshopItemId, row.output_path) : false;
     const result = this.database.prepare(`DELETE FROM downloaded_contents WHERE workshop_item_id = ?`).run(workshopItemId);
-    return result.changes > 0;
+    return { recordDeleted: result.changes > 0, deletedFiles, outputPath: row.output_path };
   }
 
   refreshDirectoryFacts(workshopItemId: string, outputPath?: string) {
@@ -246,6 +275,7 @@ export class DownloadedContentStore {
       fileCount: row.file_count,
       totalBytes: row.total_bytes,
       lastTaskId: row.last_task_id,
+      libraryHealth: inspectContentLibraryHealth(row.output_path),
     };
   }
 

@@ -24,9 +24,17 @@ export const settingsDefaults: SettingsSnapshot = {
   metadataLanguage: process.env.PANEL_DEFAULT_METADATA_LANGUAGE ?? 'en-US',
   requestIntervalMs: readNumber(process.env.PANEL_DEFAULT_REQUEST_INTERVAL_MS, 1250),
   autoGenerateNfo: readBoolean(process.env.PANEL_DEFAULT_AUTO_GENERATE_NFO, true),
+  mediaLibrary: {
+    jellyfinSidecars: readBoolean(process.env.PANEL_DEFAULT_JELLYFIN_SIDECARS, true),
+    videoOnlySidecars: readBoolean(process.env.PANEL_DEFAULT_VIDEO_ONLY_SIDECARS, true),
+    preserveExistingSidecars: readBoolean(process.env.PANEL_DEFAULT_PRESERVE_EXISTING_SIDECARS, true),
+  },
+  contentLibrary: {
+    deleteFilesDefault: readBoolean(process.env.PANEL_DEFAULT_DELETE_FILES, false),
+  },
   proxy: {
     enabled: readBoolean(process.env.PANEL_DEFAULT_PROXY_ENABLED, true),
-    url: process.env.PANEL_DEFAULT_PROXY_URL ?? 'http://10.100.1.4:7890',
+    url: process.env.PANEL_DEFAULT_PROXY_URL ?? 'http://127.0.0.1:7890',
   },
 };
 
@@ -36,8 +44,18 @@ const settingKeys: Array<keyof SettingsSnapshot> = [
   'metadataLanguage',
   'requestIntervalMs',
   'autoGenerateNfo',
+  'mediaLibrary',
+  'contentLibrary',
   'proxy',
 ];
+
+function parseSetting<T>(rowMap: Map<string, string>, key: string, fallback: T) {
+  try {
+    return JSON.parse(rowMap.get(key) ?? JSON.stringify(fallback)) as T;
+  } catch {
+    return fallback;
+  }
+}
 
 export class SettingsStore {
   constructor(private readonly database: Database.Database) {}
@@ -53,14 +71,28 @@ export class SettingsStore {
   getSnapshot(): SettingsSnapshot {
     const rows = this.database.prepare(`SELECT key, value FROM settings`).all() as Array<{ key: string; value: string }>;
     const rowMap = new Map(rows.map((row) => [row.key, row.value]));
+    const mediaLibrary = parseSetting(rowMap, 'mediaLibrary', settingsDefaults.mediaLibrary);
+    const contentLibrary = parseSetting(rowMap, 'contentLibrary', settingsDefaults.contentLibrary);
+    const proxy = parseSetting(rowMap, 'proxy', settingsDefaults.proxy);
 
     return {
-      steamAccountName: JSON.parse(rowMap.get('steamAccountName') ?? JSON.stringify(settingsDefaults.steamAccountName)) as string,
-      downloadRoot: JSON.parse(rowMap.get('downloadRoot') ?? JSON.stringify(settingsDefaults.downloadRoot)) as string,
-      metadataLanguage: JSON.parse(rowMap.get('metadataLanguage') ?? JSON.stringify(settingsDefaults.metadataLanguage)) as string,
-      requestIntervalMs: JSON.parse(rowMap.get('requestIntervalMs') ?? JSON.stringify(settingsDefaults.requestIntervalMs)) as number,
-      autoGenerateNfo: JSON.parse(rowMap.get('autoGenerateNfo') ?? JSON.stringify(settingsDefaults.autoGenerateNfo)) as boolean,
-      proxy: JSON.parse(rowMap.get('proxy') ?? JSON.stringify(settingsDefaults.proxy)) as SettingsSnapshot['proxy'],
+      steamAccountName: parseSetting(rowMap, 'steamAccountName', settingsDefaults.steamAccountName),
+      downloadRoot: parseSetting(rowMap, 'downloadRoot', settingsDefaults.downloadRoot),
+      metadataLanguage: parseSetting(rowMap, 'metadataLanguage', settingsDefaults.metadataLanguage),
+      requestIntervalMs: parseSetting(rowMap, 'requestIntervalMs', settingsDefaults.requestIntervalMs),
+      autoGenerateNfo: parseSetting(rowMap, 'autoGenerateNfo', settingsDefaults.autoGenerateNfo),
+      mediaLibrary: {
+        ...settingsDefaults.mediaLibrary,
+        ...mediaLibrary,
+      },
+      contentLibrary: {
+        ...settingsDefaults.contentLibrary,
+        ...contentLibrary,
+      },
+      proxy: {
+        ...settingsDefaults.proxy,
+        ...proxy,
+      },
     };
   }
 

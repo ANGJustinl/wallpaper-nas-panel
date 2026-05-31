@@ -9,7 +9,7 @@ import type {
 } from '../../../packages/shared/src';
 import { DownloadProgressCoach, type DownloadCoachSummary } from './components/download-progress-coach';
 import type { StatusBannerContent } from './components/status-banner';
-import { clearTaskHistory, createTask, deleteDownloadedContent, deleteTask, fetchDownloadedContents, fetchSettings, fetchTasks, fetchWorkshopItems, formatApiError, retryTask } from './lib/api';
+import { clearTaskHistory, createTask, deleteDownloadedContent, deleteTask, fetchDownloadedContents, fetchSettings, fetchTasks, fetchWorkshopItems, formatApiError, rescanDownloadedContents, retryTask } from './lib/api';
 import { fallbackDownloadedContents, fallbackFeaturedItems, fallbackSettings, fallbackTasks } from './lib/fallback-data';
 import { ContentPage } from './pages/content-page';
 import { ExplorePage } from './pages/explore-page';
@@ -269,6 +269,8 @@ export function App() {
   const [retryingTaskId, setRetryingTaskId] = useState<string | null>(null);
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [deletingContentId, setDeletingContentId] = useState<string | null>(null);
+  const [isLibraryRescanning, setIsLibraryRescanning] = useState(false);
+  const [libraryActionMessage, setLibraryActionMessage] = useState<string | null>(null);
   const [isClearingHistory, setIsClearingHistory] = useState(false);
   const [lastTaskSyncAt, setLastTaskSyncAt] = useState<string | null>(null);
   const [lastLibrarySyncAt, setLastLibrarySyncAt] = useState<string | null>(null);
@@ -765,18 +767,42 @@ export function App() {
       });
   }
 
-  function handleDeleteContent(workshopItemId: string) {
+  function handleDeleteContent(workshopItemId: string, deleteFiles: boolean) {
     setDeletingContentId(workshopItemId);
     setLibraryActionError(null);
-    deleteDownloadedContent(workshopItemId)
+    setLibraryActionMessage(null);
+    deleteDownloadedContent(workshopItemId, deleteFiles)
       .then(() => {
         setDownloadedContents((current) => current.filter((item) => item.id !== workshopItemId));
+        setLibraryActionMessage(deleteFiles ? '内容记录与本地文件已删除。' : '内容记录已移除，本地文件已保留。');
       })
       .catch((error) => {
         setLibraryActionError(formatApiError(error, '移除内容记录失败。'));
       })
       .finally(() => {
         setDeletingContentId(null);
+      });
+  }
+
+  function handleRescanLibrary() {
+    setIsLibraryRescanning(true);
+    setLibraryActionError(null);
+    setLibraryActionMessage(null);
+    rescanDownloadedContents()
+      .then((response) => {
+        setDownloadedContents(response.items);
+        setLastLibrarySyncAt(new Date().toISOString());
+        if (response.errors.length) {
+          setLibraryActionError(`${response.errors.length} 个内容项重扫失败。首个错误：${response.errors[0].title} - ${response.errors[0].message}`);
+        } else {
+          setLibraryActionMessage(`内容库已重扫，更新 ${response.updatedCount} 个项目。`);
+        }
+      })
+      .catch((error) => {
+        setLibraryActionError(formatApiError(error, '内容库重扫失败。'));
+      })
+      .finally(() => {
+        setIsLibraryRescanning(false);
       });
   }
 
@@ -871,6 +897,14 @@ export function App() {
       });
     }
 
+    if (libraryActionMessage) {
+      notices.push({
+        tone: 'success',
+        title: '内容库已更新',
+        detail: libraryActionMessage,
+      });
+    }
+
     if (queueError) {
       notices.push({
         tone: 'error',
@@ -894,7 +928,7 @@ export function App() {
     }
 
     return notices;
-  }, [isLibraryFallback, libraryActionError, libraryError, queueError]);
+  }, [isLibraryFallback, libraryActionError, libraryActionMessage, libraryError, queueError]);
 
   const showTaskAlert = activeView !== 'tasks' && Boolean(downloadCoachSummary?.activeCount || downloadCoachSummary?.hasFailures);
 
@@ -963,12 +997,15 @@ export function App() {
             selectedItemId={selectedContentId}
             deletingItemId={deletingContentId}
             isLoading={isLibraryLoading}
+            isRescanning={isLibraryRescanning}
             lastSyncedAt={lastLibrarySyncAt}
             notices={libraryNotices}
             queueingItemIds={queueingIds}
+            deleteFilesDefault={settings.contentLibrary.deleteFilesDefault}
             onRefresh={() => {
               void syncLibrary();
             }}
+            onRescan={handleRescanLibrary}
             onSelect={setSelectedContentId}
             onQueue={handleQueue}
             onDeleteRecord={handleDeleteContent}

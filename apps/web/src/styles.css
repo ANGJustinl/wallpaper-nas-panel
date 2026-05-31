@@ -261,6 +261,7 @@ img {
 }
 
 .workspace-panel {
+  min-width: 0;
   padding: 16px;
 }
 
@@ -268,6 +269,8 @@ img {
   position: sticky;
   top: 18px;
   align-self: start;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .workspace-split {
@@ -724,6 +727,40 @@ textarea:focus {
   line-height: 1.55;
 }
 
+.content-health {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.content-health__pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.content-health__pill--ready {
+  border-color: rgba(139, 197, 63, 0.34);
+  background: rgba(32, 65, 26, 0.5);
+  color: #c8ef91;
+}
+
+.content-health__pill--missing {
+  border-color: rgba(244, 103, 116, 0.34);
+  background: rgba(85, 34, 42, 0.48);
+  color: #ffb1ba;
+}
+
+.content-health__pill--neutral {
+  border-color: rgba(148, 169, 190, 0.16);
+  background: rgba(255, 255, 255, 0.026);
+  color: var(--muted);
+}
+
 .workshop-row__description {
   margin: 0;
   color: var(--text);
@@ -864,6 +901,27 @@ textarea:focus {
   display: grid;
   gap: 6px;
   margin: 14px 0;
+  min-width: 0;
+}
+
+.workspace-panel--inspector *,
+.inspector-section,
+.content-delete-confirm {
+  min-width: 0;
+}
+
+.inspector-header h3,
+.inspector-header p,
+.inspector-facts,
+.inspector-facts div,
+.inspector-facts dd,
+.inspector-facts a,
+.inspector-section p,
+.inspector-inline-error,
+.content-delete-confirm,
+.content-delete-confirm p {
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .inspector-label {
@@ -897,6 +955,11 @@ textarea:focus {
   margin: 0;
   color: var(--text);
   line-height: 1.55;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+}
+
+.inspector-facts a {
   word-break: break-word;
 }
 
@@ -1142,6 +1205,35 @@ textarea:focus {
   height: 1px;
   margin: 16px 0;
   background: var(--line);
+}
+
+.content-delete-confirm {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid rgba(244, 103, 116, 0.28);
+  background: rgba(49, 30, 38, 0.5);
+}
+
+.content-delete-confirm h4,
+.content-delete-confirm p {
+  margin: 0;
+}
+
+.content-delete-confirm h4 {
+  color: var(--text-strong);
+  font-size: 0.95rem;
+}
+
+.content-delete-confirm p {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.content-delete-confirm__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .settings-group {

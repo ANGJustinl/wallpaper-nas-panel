@@ -1,7 +1,7 @@
 import { type AppContext } from './app-context';
 import { DownloadQueue } from './modules/download-queue';
 import { DownloadedContentStore } from './modules/downloaded-content-store';
-import { writeWorkshopNfo } from './modules/nfo-writer';
+import { writeWorkshopMetadata } from './modules/nfo-writer';
 import { createDatabase, migrateDatabase } from './modules/database';
 import { SettingsStore, settingsDefaults } from './modules/settings-store';
 import { SteamCmdAdapter } from './modules/steamcmd-adapter';
@@ -69,11 +69,12 @@ function backfillWorkshopNfo(context: AppContext) {
 
   context.downloadedContentStore.listContents().forEach((content) => {
     try {
-      writeWorkshopNfo({
+      writeWorkshopMetadata({
         workshopItem: content,
         outputPath: content.outputPath,
         downloadedAt: content.downloadedAt,
         taskId: content.lastTaskId,
+        settings,
       });
       context.downloadedContentStore.refreshDirectoryFacts(content.id, content.outputPath);
     } catch (error) {

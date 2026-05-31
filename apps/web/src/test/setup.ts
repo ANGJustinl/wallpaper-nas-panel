@@ -9,6 +9,7 @@ type MockFailureRoute =
   | 'retryTask'
   | 'deleteTask'
   | 'deleteDownloadedContent'
+  | 'rescanDownloadedContents'
   | 'clearTaskHistory'
   | 'steamLoginState'
   | 'steamLogin';
@@ -121,6 +122,17 @@ const defaultLibrary = [
     fileCount: 9,
     totalBytes: 158472913,
     lastTaskId: 'task-3648823629',
+    libraryHealth: {
+      pathExists: true,
+      playableFileCount: 1,
+      workshopNfoExists: true,
+      jellyfinSidecarsStatus: 'ready',
+      jellyfinSidecars: {
+        movieNfoExists: true,
+        posterExists: true,
+        folderExists: true,
+      },
+    },
   },
 ];
 
@@ -162,9 +174,17 @@ const defaultSettings = {
   metadataLanguage: 'en-US',
   requestIntervalMs: 1250,
   autoGenerateNfo: true,
+  mediaLibrary: {
+    jellyfinSidecars: true,
+    videoOnlySidecars: true,
+    preserveExistingSidecars: true,
+  },
+  contentLibrary: {
+    deleteFilesDefault: false,
+  },
   proxy: {
     enabled: true,
-    url: 'http://10.100.1.4:7890',
+    url: 'http://127.0.0.1:7890',
   },
 };
 
@@ -237,7 +257,15 @@ globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
   }
 
   if (url.includes('/api/library/') && init?.method === 'DELETE') {
-    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+    return new Response(JSON.stringify({ ok: true, deletedFiles: url.includes('deleteFiles=true') }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (url.includes('/api/library/rescan') && init?.method === 'POST' && mockApiState.failures.has('rescanDownloadedContents')) {
+    return new Response(JSON.stringify({ error: 'rescan rejected' }), { status: 502, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (url.includes('/api/library/rescan') && init?.method === 'POST') {
+    return new Response(JSON.stringify({ ok: true, updatedCount: defaultLibrary.length, items: defaultLibrary, errors: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   }
 
   if (url.includes('/api/library') && mockApiState.failures.has('library')) {
@@ -314,7 +342,13 @@ globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
 
   if (url.includes('/api/settings') && init?.method === 'PATCH') {
     const payload = JSON.parse(String(init.body ?? '{}'));
-    const nextSettings = { ...defaultSettings, ...payload, proxy: { ...defaultSettings.proxy, ...payload.proxy } };
+    const nextSettings = {
+      ...defaultSettings,
+      ...payload,
+      mediaLibrary: { ...defaultSettings.mediaLibrary, ...payload.mediaLibrary },
+      contentLibrary: { ...defaultSettings.contentLibrary, ...payload.contentLibrary },
+      proxy: { ...defaultSettings.proxy, ...payload.proxy },
+    };
     return new Response(JSON.stringify({ settings: nextSettings, runtime: defaultRuntime }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   }
 

@@ -115,6 +115,59 @@ export function SettingsPage({ settings, runtime, isRefreshing, notices, onSetti
 
           <div className="settings-group">
             <div className="panel-copy">
+              <h3>媒体库与内容管理</h3>
+              <p>控制 Jellyfin 旁挂文件和内容库删除默认行为。</p>
+            </div>
+            <div className="settings-form-grid">
+              <label className="settings-grid__checkbox">
+                <input
+                  type="checkbox"
+                  checked={form.mediaLibrary.jellyfinSidecars}
+                  onChange={(event) => setForm((current) => ({
+                    ...current,
+                    mediaLibrary: { ...current.mediaLibrary, jellyfinSidecars: event.target.checked },
+                  }))}
+                />
+                <span>生成 Jellyfin 兼容旁挂文件</span>
+              </label>
+              <label className="settings-grid__checkbox">
+                <input
+                  type="checkbox"
+                  checked={form.mediaLibrary.videoOnlySidecars}
+                  onChange={(event) => setForm((current) => ({
+                    ...current,
+                    mediaLibrary: { ...current.mediaLibrary, videoOnlySidecars: event.target.checked },
+                  }))}
+                />
+                <span>仅为可播放视频生成旁挂</span>
+              </label>
+              <label className="settings-grid__checkbox">
+                <input
+                  type="checkbox"
+                  checked={form.mediaLibrary.preserveExistingSidecars}
+                  onChange={(event) => setForm((current) => ({
+                    ...current,
+                    mediaLibrary: { ...current.mediaLibrary, preserveExistingSidecars: event.target.checked },
+                  }))}
+                />
+                <span>不覆盖已有 movie.nfo / poster.jpg</span>
+              </label>
+              <label className="settings-grid__checkbox">
+                <input
+                  type="checkbox"
+                  checked={form.contentLibrary.deleteFilesDefault}
+                  onChange={(event) => setForm((current) => ({
+                    ...current,
+                    contentLibrary: { ...current.contentLibrary, deleteFilesDefault: event.target.checked },
+                  }))}
+                />
+                <span>删除确认默认勾选本地文件</span>
+              </label>
+            </div>
+          </div>
+
+          <div className="settings-group">
+            <div className="panel-copy">
               <h3>代理与连通性</h3>
               <p>抓取与 steamcmd 共用这里的代理设置。</p>
             </div>
@@ -138,7 +191,7 @@ export function SettingsPage({ settings, runtime, isRefreshing, notices, onSetti
                     ...current,
                     proxy: { ...current.proxy, url: event.target.value },
                   }))}
-                  placeholder="http://10.100.1.4:7890"
+                  placeholder="http://127.0.0.1:7890"
                 />
               </label>
             </div>

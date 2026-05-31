@@ -31,6 +31,14 @@ export interface SettingsSnapshot {
   metadataLanguage: string;
   requestIntervalMs: number;
   autoGenerateNfo: boolean;
+  mediaLibrary: {
+    jellyfinSidecars: boolean;
+    videoOnlySidecars: boolean;
+    preserveExistingSidecars: boolean;
+  };
+  contentLibrary: {
+    deleteFilesDefault: boolean;
+  };
   proxy: {
     enabled: boolean;
     url: string;
@@ -78,6 +86,19 @@ export interface DownloadedContentItem extends WorkshopItemSummary {
   fileCount: number;
   totalBytes: number;
   lastTaskId: string;
+  libraryHealth: ContentLibraryHealth;
+}
+
+export interface ContentLibraryHealth {
+  pathExists: boolean;
+  playableFileCount: number;
+  workshopNfoExists: boolean;
+  jellyfinSidecarsStatus: 'ready' | 'missing' | 'not_applicable';
+  jellyfinSidecars: {
+    movieNfoExists: boolean;
+    posterExists: boolean;
+    folderExists: boolean;
+  };
 }
 
 export interface WorkshopTagFilters {
@@ -114,6 +135,23 @@ export interface TasksResponse {
 
 export interface DownloadedContentsResponse {
   items: DownloadedContentItem[];
+}
+
+export interface ContentLibraryDeleteResponse {
+  ok: boolean;
+  deletedFiles: boolean;
+  outputPath?: string;
+}
+
+export interface ContentLibraryRescanResponse {
+  ok: boolean;
+  updatedCount: number;
+  items: DownloadedContentItem[];
+  errors: Array<{
+    id: string;
+    title: string;
+    message: string;
+  }>;
 }
 
 export interface CreateTaskResponse {

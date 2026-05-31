@@ -7,7 +7,7 @@ import type {
   WorkshopItemSummary,
 } from '../../../../packages/shared/src';
 import { DownloadedContentStore } from './downloaded-content-store';
-import { writeWorkshopNfo } from './nfo-writer';
+import { writeWorkshopMetadata } from './nfo-writer';
 import { SettingsStore } from './settings-store';
 import { SteamCmdAdapter, type SteamCmdBatchItemExecutionResult, type SteamCmdProgressEvent } from './steamcmd-adapter';
 import { type SteamCmdSocketLockHandle, SteamCmdSocketLock } from './steamcmd-socket-lock';
@@ -238,11 +238,12 @@ export class DownloadQueue {
 
         if (settings.autoGenerateNfo) {
           try {
-            writeWorkshopNfo({
+            writeWorkshopMetadata({
               workshopItem: taskWorkshopItem,
               outputPath: itemResult.outputPath,
               downloadedAt: finishedTask.finishedAt,
               taskId: finishedTask.id,
+              settings,
             });
           } catch (error) {
             const message = error instanceof Error ? error.message : 'NFO 生成失败';
