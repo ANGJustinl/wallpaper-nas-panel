@@ -75,6 +75,12 @@ PANEL_DEFAULT_PROXY_URL=http://127.0.0.1:7890
 docker compose up -d --build
 ```
 
+默认本地镜像名为：
+
+- `wallpaper-nas-panel-web:local`
+- `wallpaper-nas-panel-api:local`
+- `wallpaper-nas-panel-worker:local`
+
 启动后访问：
 
 - Web 面板：`http://<你的服务器IP>:8080/`
@@ -84,6 +90,79 @@ docker compose up -d --build
 
 ```text
 http://127.0.0.1:8080/
+```
+
+## 使用 Docker Image 部署
+
+如果不想在 NAS 上本地构建镜像，可以直接使用 GitHub Container Registry 的镜像。项目是三容器架构，所以需要同时运行 `web`、`api`、`worker` 三个镜像。
+
+镜像地址：
+
+- `ghcr.io/angjustinl/wallpaper-nas-panel-web:latest`
+- `ghcr.io/angjustinl/wallpaper-nas-panel-api:latest`
+- `ghcr.io/angjustinl/wallpaper-nas-panel-worker:latest`
+
+### 1. 创建部署目录
+
+```bash
+mkdir -p ~/wallpaper-nas-panel
+cd ~/wallpaper-nas-panel
+```
+
+### 2. 下载纯镜像版 Compose 文件
+
+```bash
+curl -fsSL \
+  -o docker-compose.yml \
+  https://raw.githubusercontent.com/ANGJustinl/wallpaper-nas-panel/main/apps/docker-compose.images.yml
+```
+
+如果你的网络无法访问 `raw.githubusercontent.com`，也可以从仓库里的 `apps/docker-compose.images.yml` 手动保存为当前目录的 `docker-compose.yml`。
+
+### 3. 创建 `.env`
+
+```bash
+cat > .env <<'EOF'
+PANEL_WEB_PORT=8080
+PANEL_API_PORT=3001
+PANEL_DEFAULT_STEAM_ACCOUNT=nas-panel-operator
+PANEL_DEFAULT_DOWNLOAD_ROOT=/downloads/431960
+PANEL_DEFAULT_METADATA_LANGUAGE=en-US
+PANEL_DEFAULT_REQUEST_INTERVAL_MS=1250
+PANEL_DEFAULT_AUTO_GENERATE_NFO=true
+PANEL_DEFAULT_PROXY_ENABLED=false
+PANEL_DEFAULT_PROXY_URL=http://127.0.0.1:7890
+EOF
+```
+
+如果要复用已有 SteamCMD 目录，再追加：
+
+```bash
+cat >> .env <<'EOF'
+PANEL_STEAMCMD_INSTALL_SOURCE=/srv/dev-disk-by-uuid-xxx/steamcmd/steamcmd
+PANEL_STEAM_DATA_SOURCE=/srv/dev-disk-by-uuid-xxx/steamcmd/Steam
+EOF
+```
+
+### 4. 拉取并启动
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+访问：
+
+```text
+http://<你的服务器IP>:8080/
+```
+
+### 5. 更新镜像
+
+```bash
+cd ~/wallpaper-nas-panel
+docker compose pull
+docker compose up -d
 ```
 
 ## 首次使用流程
@@ -204,7 +283,7 @@ folder.jpg
 
 `poster.jpg` 和 `folder.jpg` 会优先从本地 `preview.jpg` 复制，不会额外远程下载图片。非视频项目，例如只包含 `scene.pkg` 的 Wallpaper Engine 场景，会保留归档型 `workshop.nfo`，Jellyfin 状态会显示为“不适用”。
 
-如果你的 Jellyfin 直接扫描 Steam workshop cache，例如 `/home/steam/Steam/steamapps/workshop/content/431960`，可以在内容库页点击“识别 Steam 目录”。面板会扫描当前 `WORKSHOP_CONTENT_DIR` 下的数字 ID 文件夹，读取本地 `project.json`，把这些文件夹导入/更新为内容库记录，并直接在原 Steam 文件夹里重新生成 `workshop.nfo`、`movie.nfo`、`poster.jpg`、`folder.jpg`。这个手动识别动作会覆盖旧的 Jellyfin 旁挂，用来修复 Jellyfin 已经导出过的数字标题或陈旧 metadata。
+如果你的 Jellyfin 直接扫描 Steam workshop cache，例如 `/home/steam/Steam/steamapps/workshop/content/431960`，可以在内容库页点击“识别 Steam 目录”。面板会扫描当前 `WORKSHOP_CONTENT_DIR` 下的数字 ID 文件夹，读取本地 `project.json`，再尝试按创意工坊 ID 补查 Steam 详情。查到详情时，Jellyfin 的内容简介会写入创意工坊描述；查不到时，保留 `project.json` 里的本地导入描述。导入记录会直接在原 Steam 文件夹里重新生成 `workshop.nfo`、`movie.nfo`、`poster.jpg`、`folder.jpg`。这个手动识别动作会覆盖旧的 Jellyfin 旁挂，用来修复 Jellyfin 已经导出过的数字标题、占位简介或陈旧 metadata。
 
 ## 内容库管理
 
@@ -336,4 +415,3 @@ npm run build
 
 ## 友情链接
 [LINUX DO - 新的理想型社区](https://linux.do/)
-

@@ -17,6 +17,55 @@ docker compose up --build
 
 3. Open `http://localhost:8080` by default.
 
+The local image names are:
+
+- `wallpaper-nas-panel-web:local`
+- `wallpaper-nas-panel-api:local`
+- `wallpaper-nas-panel-worker:local`
+
+Published GHCR images can be selected by setting `PANEL_WEB_IMAGE`, `PANEL_API_IMAGE`, and `PANEL_WORKER_IMAGE` in `.env`.
+
+## Image-Only Deployment
+
+Use `docker-compose.images.yml` when deploying from published images without the source tree:
+
+```bash
+mkdir -p ~/wallpaper-nas-panel
+cd ~/wallpaper-nas-panel
+curl -fsSL \
+  -o docker-compose.yml \
+  https://raw.githubusercontent.com/ANGJustinl/wallpaper-nas-panel/main/apps/docker-compose.images.yml
+```
+
+Create `.env`:
+
+```env
+PANEL_WEB_PORT=8080
+PANEL_API_PORT=3001
+PANEL_DEFAULT_STEAM_ACCOUNT=nas-panel-operator
+PANEL_DEFAULT_DOWNLOAD_ROOT=/downloads/431960
+PANEL_DEFAULT_METADATA_LANGUAGE=en-US
+PANEL_DEFAULT_REQUEST_INTERVAL_MS=1250
+PANEL_DEFAULT_AUTO_GENERATE_NFO=true
+PANEL_DEFAULT_PROXY_ENABLED=false
+PANEL_DEFAULT_PROXY_URL=http://127.0.0.1:7890
+```
+
+Start or update:
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+The default image-only compose file uses:
+
+- `ghcr.io/angjustinl/wallpaper-nas-panel-web:latest`
+- `ghcr.io/angjustinl/wallpaper-nas-panel-api:latest`
+- `ghcr.io/angjustinl/wallpaper-nas-panel-worker:latest`
+
+Override `PANEL_WEB_IMAGE`, `PANEL_API_IMAGE`, and `PANEL_WORKER_IMAGE` for forked or private packages.
+
 ## Deployment Verification
 
 After rebuilding or moving the stack to a NAS, run the smoke check from the repository root:

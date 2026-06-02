@@ -1,9 +1,6 @@
 services:
   api:
-    image: ${PANEL_API_IMAGE:-wallpaper-nas-panel-api:local}
-    build:
-      context: ..
-      dockerfile: apps/server/Dockerfile.api
+    image: ${PANEL_API_IMAGE:-ghcr.io/angjustinl/wallpaper-nas-panel-api:latest}
     environment:
       PORT: 3001
       PANEL_DB_PATH: /data/panel.sqlite
@@ -29,10 +26,7 @@ services:
     restart: unless-stopped
 
   worker:
-    image: ${PANEL_WORKER_IMAGE:-wallpaper-nas-panel-worker:local}
-    build:
-      context: ..
-      dockerfile: apps/server/Dockerfile.worker
+    image: ${PANEL_WORKER_IMAGE:-ghcr.io/angjustinl/wallpaper-nas-panel-worker:latest}
     environment:
       PANEL_DB_PATH: /data/panel.sqlite
       PANEL_DEFAULT_STEAM_ACCOUNT: ${PANEL_DEFAULT_STEAM_ACCOUNT:-nas-panel-operator}
@@ -55,12 +49,7 @@ services:
     restart: unless-stopped
 
   web:
-    image: ${PANEL_WEB_IMAGE:-wallpaper-nas-panel-web:local}
-    build:
-      context: ..
-      dockerfile: apps/web/Dockerfile
-      args:
-        VITE_API_BASE_URL: ""
+    image: ${PANEL_WEB_IMAGE:-ghcr.io/angjustinl/wallpaper-nas-panel-web:latest}
     depends_on:
       - api
     ports:
