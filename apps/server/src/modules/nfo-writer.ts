@@ -204,6 +204,20 @@ export function writeWorkshopNfo(input: WriteWorkshopNfoInput) {
   return nfoPath;
 }
 
+function createJellyfinMovieNfo(input: WriteWorkshopNfoInput) {
+  const previewPath = resolve(input.outputPath, LOCAL_PREVIEW_FILENAME);
+  const posterPath = resolve(input.outputPath, JELLYFIN_POSTER_FILENAME);
+  const localThumb = existsSync(previewPath) || existsSync(posterPath) ? JELLYFIN_POSTER_FILENAME : input.workshopItem.previewUrl;
+
+  return createWorkshopNfo({
+    ...input,
+    workshopItem: {
+      ...input.workshopItem,
+      previewUrl: localThumb,
+    },
+  });
+}
+
 export function writeWorkshopMetadata(input: WriteWorkshopMetadataInput) {
   mkdirSync(input.outputPath, { recursive: true });
   writeWorkshopNfo(input);
@@ -221,7 +235,7 @@ export function writeWorkshopMetadata(input: WriteWorkshopMetadataInput) {
   const preserveExistingSidecars = mediaLibrary.preserveExistingSidecars;
   writeFileSidecar(
     resolve(input.outputPath, JELLYFIN_MOVIE_NFO_FILENAME),
-    createWorkshopNfo(input),
+    createJellyfinMovieNfo(input),
     preserveExistingSidecars,
   );
 

@@ -104,6 +104,7 @@ test('writeWorkshopMetadata writes Jellyfin sidecars for playable video content'
   assert.equal(existsSync(resolve(outputPath, 'movie.nfo')), true);
   assert.equal(existsSync(resolve(outputPath, 'poster.jpg')), true);
   assert.equal(existsSync(resolve(outputPath, 'folder.jpg')), true);
+  assert.match(readFileSync(resolve(outputPath, 'movie.nfo'), 'utf8'), /<thumb>poster\.jpg<\/thumb>/);
   assert.equal(health.jellyfinSidecarsStatus, 'ready');
   assert.equal(health.playableFileCount, 1);
 });

@@ -147,6 +147,13 @@ export function createDownloadedContentRoutes(context: AppContext) {
 
   function identifySteamWorkshopContents(_request: Request, response: Response) {
     const settings = context.settingsStore.getSnapshot();
+    const scrapeSettings = {
+      ...settings,
+      mediaLibrary: {
+        ...settings.mediaLibrary,
+        preserveExistingSidecars: false,
+      },
+    };
     const identification = identifySteamWorkshopFolders(context.steamCmdConfig.workshopContentDir);
     const errors = [...identification.errors];
     let importedCount = 0;
@@ -169,7 +176,7 @@ export function createDownloadedContentRoutes(context: AppContext) {
             outputPath,
             downloadedAt: discoveredAt,
             taskId: lastTaskId,
-            settings,
+            settings: scrapeSettings,
           });
         }
 

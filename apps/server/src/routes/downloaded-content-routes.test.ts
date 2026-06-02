@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import test from 'node:test';
@@ -174,6 +174,7 @@ test('POST /api/library/identify-steam imports Steam workshop folders and scrape
   mkdirSync(sourcePath, { recursive: true });
   writeFileSync(resolve(sourcePath, 'loop.mp4'), 'video', 'utf8');
   writeFileSync(resolve(sourcePath, 'preview.jpg'), 'preview', 'utf8');
+  writeFileSync(resolve(sourcePath, 'movie.nfo'), '<movie><title>555</title></movie>', 'utf8');
   writeFileSync(resolve(sourcePath, 'project.json'), JSON.stringify({
     title: 'Steam Cache Video',
     description: 'local project',
@@ -195,6 +196,8 @@ test('POST /api/library/identify-steam imports Steam workshop folders and scrape
   assert.equal(response.statusCode, 200);
   assert.equal(existsSync(resolve(sourcePath, 'movie.nfo')), true);
   assert.equal(existsSync(resolve(sourcePath, 'poster.jpg')), true);
+  assert.match(readFileSync(resolve(sourcePath, 'movie.nfo'), 'utf8'), /<title>Route Test Wallpaper<\/title>/);
+  assert.match(readFileSync(resolve(sourcePath, 'movie.nfo'), 'utf8'), /<thumb>poster\.jpg<\/thumb>/);
   assert.match(JSON.stringify(response.body), /"importedCount":1/);
   assert.match(JSON.stringify(response.body), /"author":"Known Creator"/);
   assert.match(JSON.stringify(response.body), /"rating":4.5/);
