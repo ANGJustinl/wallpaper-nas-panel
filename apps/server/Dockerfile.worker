@@ -4,6 +4,10 @@ FROM docker.1ms.run/cm2network/steamcmd:root-bookworm
 
 COPY --from=node-runtime /usr/local /usr/local
 
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 make g++ \
+  && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /workspace
 
 COPY --chown=steam:steam tsconfig.base.json ./tsconfig.base.json
