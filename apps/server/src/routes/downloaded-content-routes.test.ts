@@ -9,6 +9,9 @@ import type { AppContext } from '../app-context';
 import { migrateDatabase } from '../modules/database';
 import { DownloadedContentStore } from '../modules/downloaded-content-store';
 import { SettingsStore } from '../modules/settings-store';
+import { SteamCmdAdapter } from '../modules/steamcmd-adapter';
+import type { SteamCmdConfig } from '../modules/steamcmd-config';
+import { TaskStore } from '../modules/task-store';
 import type { DownloadTask, WorkshopItemSummary } from '../../../../packages/shared/src';
 import { createDownloadedContentRoutes } from './downloaded-content-routes';
 
@@ -73,15 +76,36 @@ function createContext() {
   migrateDatabase(database);
   const downloadedContentStore = new DownloadedContentStore(database);
   const settingsStore = new SettingsStore(database);
+  const taskStore = new TaskStore(database);
+  const baseDir = mkdtempSync(resolve(tmpdir(), 'library-route-context-'));
+  const steamCmdScriptPath = resolve(baseDir, 'steamcmd', 'steamcmd.sh');
+  const workshopContentDir = resolve(baseDir, 'workshop');
+  mkdirSync(resolve(steamCmdScriptPath, '..'), { recursive: true });
+  mkdirSync(workshopContentDir, { recursive: true });
+  writeFileSync(steamCmdScriptPath, '#!/bin/sh\n', 'utf8');
+  const steamCmdConfig: SteamCmdConfig = {
+    steamCmdScriptPath,
+    appId: '431960',
+    workshopContentDir,
+    lockSocketPath: resolve(baseDir, 'steamcmd.sock'),
+    batchMaxItems: 20,
+    available: true,
+  };
+  const steamCmdAdapter = new SteamCmdAdapter(steamCmdConfig);
   settingsStore.seedDefaults();
 
   return {
     context: {
       downloadedContentStore,
       settingsStore,
+      taskStore,
+      steamCmdConfig,
+      steamCmdAdapter,
     } as AppContext,
     downloadedContentStore,
     settingsStore,
+    taskStore,
+    steamCmdConfig,
   };
 }
 
@@ -117,5 +141,63 @@ test('POST /api/library/rescan refreshes facts and writes missing sidecars', () 
   assert.equal(existsSync(resolve(outputPath, 'movie.nfo')), true);
   assert.equal(existsSync(resolve(outputPath, 'poster.jpg')), true);
   assert.match(JSON.stringify(response.body), /"updatedCount":1/);
+  assert.match(JSON.stringify(response.body), /"jellyfinSidecarsStatus":"ready"/);
+});
+
+test('POST /api/library/rescan restores missing output files from Steam workshop cache', () => {
+  const { context, downloadedContentStore, steamCmdConfig } = createContext();
+  const outputPath = resolve(mkdtempSync(resolve(tmpdir(), 'library-route-rescan-cache-')), '333');
+  mkdirSync(outputPath, { recursive: true });
+  writeFileSync(resolve(outputPath, 'workshop.nfo'), 'metadata only', 'utf8');
+  const sourcePath = resolve(steamCmdConfig.workshopContentDir, '333');
+  mkdirSync(sourcePath, { recursive: true });
+  writeFileSync(resolve(sourcePath, 'loop.mp4'), 'video', 'utf8');
+  writeFileSync(resolve(sourcePath, 'preview.jpg'), 'preview', 'utf8');
+  downloadedContentStore.recordDownload(createTask('task-333', '333', outputPath), createWorkshopItem('333'), outputPath);
+
+  const routes = createDownloadedContentRoutes(context);
+  const response = createResponse();
+  routes.rescanContents({} as Request, response);
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(existsSync(resolve(outputPath, 'loop.mp4')), true);
+  assert.equal(existsSync(resolve(outputPath, 'preview.jpg')), true);
+  assert.equal(existsSync(resolve(outputPath, 'movie.nfo')), true);
+  assert.equal(existsSync(resolve(outputPath, 'poster.jpg')), true);
+  assert.match(JSON.stringify(response.body), /"fileCount":6/);
+  assert.match(JSON.stringify(response.body), /"jellyfinSidecarsStatus":"ready"/);
+});
+
+test('POST /api/library/identify-steam imports Steam workshop folders and scrapes sidecars in place', () => {
+  const { context, steamCmdConfig, taskStore } = createContext();
+  const sourcePath = resolve(steamCmdConfig.workshopContentDir, '555');
+  mkdirSync(sourcePath, { recursive: true });
+  writeFileSync(resolve(sourcePath, 'loop.mp4'), 'video', 'utf8');
+  writeFileSync(resolve(sourcePath, 'preview.jpg'), 'preview', 'utf8');
+  writeFileSync(resolve(sourcePath, 'project.json'), JSON.stringify({
+    title: 'Steam Cache Video',
+    description: 'local project',
+    type: 'video',
+    contentrating: 'Everyone',
+    tags: ['Anime'],
+  }), 'utf8');
+  taskStore.upsertTask(createTask('task-555', '555', sourcePath), {
+    ...createWorkshopItem('555'),
+    author: 'Known Creator',
+    rating: 4.5,
+    previewUrl: 'https://images.steamusercontent.com/known-preview.jpg',
+  });
+
+  const routes = createDownloadedContentRoutes(context);
+  const response = createResponse();
+  routes.identifySteamWorkshopContents({} as Request, response);
+
+  assert.equal(response.statusCode, 200);
+  assert.equal(existsSync(resolve(sourcePath, 'movie.nfo')), true);
+  assert.equal(existsSync(resolve(sourcePath, 'poster.jpg')), true);
+  assert.match(JSON.stringify(response.body), /"importedCount":1/);
+  assert.match(JSON.stringify(response.body), /"author":"Known Creator"/);
+  assert.match(JSON.stringify(response.body), /"rating":4.5/);
+  assert.match(JSON.stringify(response.body), new RegExp(`"outputPath":"${sourcePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`));
   assert.match(JSON.stringify(response.body), /"jellyfinSidecarsStatus":"ready"/);
 });

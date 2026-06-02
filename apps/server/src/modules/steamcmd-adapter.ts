@@ -164,6 +164,23 @@ export class SteamCmdAdapter {
     return resolve(settings.downloadRoot || this.config.workshopContentDir, workshopItemId);
   }
 
+  syncCachedItemToOutput(workshopItemId: string, outputPath: string) {
+    const sourcePath = this.resolveDownloadedItemPath(workshopItemId);
+    const targetPath = resolve(outputPath);
+
+    if (!existsSync(sourcePath)) {
+      return { synced: false, sourcePath, targetPath };
+    }
+
+    if (sourcePath === targetPath) {
+      return { synced: false, sourcePath, targetPath };
+    }
+
+    mkdirSync(resolve(targetPath, '..'), { recursive: true });
+    cpSync(sourcePath, targetPath, { recursive: true, force: true });
+    return { synced: true, sourcePath, targetPath };
+  }
+
   private summarizeOutput(stdout: string, stderr: string) {
     const normalizedLines = this.normalizeOutputLines(stdout, stderr);
 

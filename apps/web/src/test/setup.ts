@@ -10,6 +10,7 @@ type MockFailureRoute =
   | 'deleteTask'
   | 'deleteDownloadedContent'
   | 'rescanDownloadedContents'
+  | 'identifySteamWorkshopContents'
   | 'clearTaskHistory'
   | 'steamLoginState'
   | 'steamLogin';
@@ -266,6 +267,24 @@ globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
 
   if (url.includes('/api/library/rescan') && init?.method === 'POST') {
     return new Response(JSON.stringify({ ok: true, updatedCount: defaultLibrary.length, items: defaultLibrary, errors: [] }), { status: 200, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (url.includes('/api/library/identify-steam') && init?.method === 'POST' && mockApiState.failures.has('identifySteamWorkshopContents')) {
+    return new Response(JSON.stringify({ error: 'steam folder scan rejected' }), { status: 502, headers: { 'Content-Type': 'application/json' } });
+  }
+
+  if (url.includes('/api/library/identify-steam') && init?.method === 'POST') {
+    return new Response(JSON.stringify({
+      ok: true,
+      workshopContentDir: '/home/steam/Steam/steamapps/workshop/content/431960',
+      scannedCount: defaultLibrary.length,
+      importedCount: defaultLibrary.length,
+      items: defaultLibrary.map((item) => ({
+        ...item,
+        outputPath: `/home/steam/Steam/steamapps/workshop/content/431960/${item.id}`,
+      })),
+      errors: [],
+    }), { status: 200, headers: { 'Content-Type': 'application/json' } });
   }
 
   if (url.includes('/api/library') && mockApiState.failures.has('library')) {

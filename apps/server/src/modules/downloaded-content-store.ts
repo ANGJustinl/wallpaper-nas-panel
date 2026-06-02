@@ -23,6 +23,14 @@ interface DownloadedContentRow {
   last_task_id: string;
 }
 
+const localPreviewCandidates = ['preview.jpg', 'poster.jpg', 'folder.jpg'];
+
+function findLocalPreviewPath(outputPath: string) {
+  return localPreviewCandidates
+    .map((filename) => resolve(outputPath, filename))
+    .find((path) => existsSync(path)) ?? null;
+}
+
 function parseJsonValue<T>(input: string, fallback: T) {
   try {
     return JSON.parse(input) as T;
@@ -113,6 +121,53 @@ export class DownloadedContentStore {
     return rows.map((row) => this.toItem(row));
   }
 
+  getContent(workshopItemId: string) {
+    const row = this.database
+      .prepare(
+        `
+          SELECT
+            workshop_item_id,
+            workshop_title,
+            author,
+            preview_url,
+            rating,
+            tags_json,
+            description,
+            source,
+            metadata_json,
+            output_path,
+            downloaded_at,
+            entry_count,
+            file_count,
+            total_bytes,
+            last_task_id
+          FROM downloaded_contents
+          WHERE workshop_item_id = ?
+          LIMIT 1
+        `,
+      )
+      .get(workshopItemId) as DownloadedContentRow | undefined;
+
+    return row ? this.toItem(row) : null;
+  }
+
+  getLocalPreviewPath(workshopItemId: string) {
+    const row = this.database.prepare(
+      `
+        SELECT output_path
+        FROM downloaded_contents
+        WHERE workshop_item_id = ?
+        LIMIT 1
+      `,
+    ).get(workshopItemId) as { output_path: string } | undefined;
+
+    if (!row) {
+      return null;
+    }
+
+    return findLocalPreviewPath(row.output_path);
+  }
+
   deleteContent(workshopItemId: string, options: { deleteFiles?: boolean } = {}) {
     const row = this.database.prepare(
       `
@@ -183,6 +238,13 @@ export class DownloadedContentStore {
   }
 
   recordDownload(task: DownloadTask, workshopItem: WorkshopItemSummary, outputPath: string) {
+    this.recordContent(workshopItem, outputPath, {
+      downloadedAt: task.finishedAt ?? new Date().toISOString(),
+      lastTaskId: task.id,
+    });
+  }
+
+  recordContent(workshopItem: WorkshopItemSummary, outputPath: string, options: { downloadedAt?: string; lastTaskId?: string } = {}) {
     const directoryFacts = inspectDirectory(outputPath);
     const metadata = normalizeWorkshopMetadata(workshopItem.metadata, workshopItem.tags);
 
@@ -248,22 +310,23 @@ export class DownloadedContentStore {
       source: workshopItem.source,
       metadata_json: JSON.stringify(metadata),
       output_path: outputPath,
-      downloaded_at: task.finishedAt ?? new Date().toISOString(),
+      downloaded_at: options.downloadedAt ?? new Date().toISOString(),
       entry_count: directoryFacts.entryCount,
       file_count: directoryFacts.fileCount,
       total_bytes: directoryFacts.totalBytes,
-      last_task_id: task.id,
+      last_task_id: options.lastTaskId ?? `manual-${workshopItem.id}`,
     });
   }
 
   private toItem(row: DownloadedContentRow): DownloadedContentItem {
     const tags = parseJsonValue<string[]>(row.tags_json, []);
+    const previewUrl = row.preview_url || (findLocalPreviewPath(row.output_path) ? `/api/library/${encodeURIComponent(row.workshop_item_id)}/preview` : '');
 
     return {
       id: row.workshop_item_id,
       title: row.workshop_title,
       author: row.author || '未知作者',
-      previewUrl: row.preview_url,
+      previewUrl,
       rating: Number.isFinite(row.rating) ? Number(row.rating) : 0,
       tags,
       description: row.description || '暂无简介。',

@@ -8,12 +8,14 @@ interface ContentPageProps {
   deletingItemId: string | null;
   isLoading: boolean;
   isRescanning: boolean;
+  isIdentifyingSteamWorkshop: boolean;
   lastSyncedAt: string | null;
   notices: StatusBannerContent[];
   queueingItemIds: string[];
   deleteFilesDefault: boolean;
   onRefresh: () => void;
   onRescan: () => void;
+  onIdentifySteamWorkshop: () => void;
   onSelect: (itemId: string) => void;
   onQueue: (item: DownloadedContentItem) => void;
   onDeleteRecord: (itemId: string, deleteFiles: boolean) => void;
@@ -101,12 +103,14 @@ export function ContentPage({
   deletingItemId,
   isLoading,
   isRescanning,
+  isIdentifyingSteamWorkshop,
   lastSyncedAt,
   notices,
   queueingItemIds,
   deleteFilesDefault,
   onRefresh,
   onRescan,
+  onIdentifySteamWorkshop,
   onSelect,
   onQueue,
   onDeleteRecord,
@@ -141,9 +145,9 @@ export function ContentPage({
       ) : null}
 
       <header className="workspace-header workspace-header--page">
-        <div>
-          <h2>已下载内容管理</h2>
-          <p className="workspace-header__meta">已下载项目、目录和 metadata。</p>
+          <div>
+            <h2>已下载内容管理</h2>
+            <p className="workspace-header__meta">已下载项目、目录与元数据状态。</p>
         </div>
         <div className="workspace-header__actions">
           <div className="compact-stat">
@@ -159,6 +163,14 @@ export function ContentPage({
           </button>
           <button type="button" className="signal-button signal-button--inline" onClick={onRescan} disabled={isRescanning}>
             {isRescanning ? '重扫中…' : '重扫/校验'}
+          </button>
+          <button
+            type="button"
+            className="signal-button signal-button--secondary signal-button--inline"
+            onClick={onIdentifySteamWorkshop}
+            disabled={isIdentifyingSteamWorkshop}
+          >
+            {isIdentifyingSteamWorkshop ? '识别中…' : '识别 Steam 目录'}
           </button>
         </div>
       </header>
@@ -305,7 +317,7 @@ export function ContentPage({
               <dl className="inspector-facts">
                 <div>
                   <dt>输出目录</dt>
-                  <dd>{selectedItem.outputPath}</dd>
+                  <dd className="inspector-path"><code>{selectedItem.outputPath}</code></dd>
                 </div>
                 <div>
                   <dt>下载时间</dt>

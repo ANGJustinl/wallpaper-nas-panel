@@ -1,5 +1,6 @@
 import type {
   ContentLibraryDeleteResponse,
+  ContentLibraryIdentifySteamResponse,
   ContentLibraryRescanResponse,
   CreateTaskResponse,
   DownloadedContentsResponse,
@@ -172,6 +173,12 @@ export function deleteDownloadedContent(workshopItemId: string, deleteFiles = fa
 
 export function rescanDownloadedContents() {
   return readJson<ContentLibraryRescanResponse>('/api/library/rescan', {
+    method: 'POST',
+  });
+}
+
+export function identifySteamWorkshopContents() {
+  return readJson<ContentLibraryIdentifySteamResponse>('/api/library/identify-steam', {
     method: 'POST',
   });
 }

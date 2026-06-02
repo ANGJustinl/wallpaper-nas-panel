@@ -5,7 +5,7 @@ import { App } from './App';
 
 const mockApi = (globalThis as typeof globalThis & {
   __panelMockApi: {
-    failRoute: (route: 'workshop' | 'tasks' | 'library' | 'settings' | 'createTask' | 'retryTask' | 'deleteTask' | 'deleteDownloadedContent' | 'rescanDownloadedContents' | 'clearTaskHistory' | 'steamLoginState' | 'steamLogin') => void;
+    failRoute: (route: 'workshop' | 'tasks' | 'library' | 'settings' | 'createTask' | 'retryTask' | 'deleteTask' | 'deleteDownloadedContent' | 'rescanDownloadedContents' | 'identifySteamWorkshopContents' | 'clearTaskHistory' | 'steamLoginState' | 'steamLogin') => void;
     reset: () => void;
   };
 }).__panelMockApi;
@@ -226,6 +226,19 @@ describe('App shell', () => {
 
     expect(await screen.findByText(/内容库已更新/i)).toBeInTheDocument();
     expect(screen.getByText(/更新 1 个项目/i)).toBeInTheDocument();
+  });
+
+  it('identifies Steam workshop folders and switches records to the Steam cache path', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('link', { name: /内容库/i }));
+    await screen.findByRole('heading', { name: /已下载内容管理/i });
+    await user.click(screen.getByRole('button', { name: /识别 Steam 目录/i }));
+
+    expect(await screen.findByText(/内容库已更新/i)).toBeInTheDocument();
+    expect(screen.getByText(/已识别 1 个 Steam workshop 目录/i)).toBeInTheDocument();
+    expect(screen.getByText(/\/home\/steam\/Steam\/steamapps\/workshop\/content\/431960\/3648823629/i)).toBeInTheDocument();
   });
 
   it('shows an error when content library rescan fails', async () => {

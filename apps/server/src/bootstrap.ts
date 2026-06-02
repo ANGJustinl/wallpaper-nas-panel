@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { type AppContext } from './app-context';
 import { DownloadQueue } from './modules/download-queue';
 import { DownloadedContentStore } from './modules/downloaded-content-store';
@@ -58,28 +59,30 @@ export function seedApplicationData(context: AppContext) {
   context.workerStateStore.seedDefaults();
   seedTaskStore(context.taskStore);
   context.downloadedContentStore.backfillFromSucceededTasks(context.taskStore.listSucceededLibraryCandidates());
-  backfillWorkshopNfo(context);
+  backfillDownloadedContentArtifacts(context);
 }
 
-function backfillWorkshopNfo(context: AppContext) {
+function backfillDownloadedContentArtifacts(context: AppContext) {
   const settings = context.settingsStore.getSnapshot();
-  if (!settings.autoGenerateNfo) {
-    return;
-  }
 
   context.downloadedContentStore.listContents().forEach((content) => {
     try {
-      writeWorkshopMetadata({
-        workshopItem: content,
-        outputPath: content.outputPath,
-        downloadedAt: content.downloadedAt,
-        taskId: content.lastTaskId,
-        settings,
-      });
+      context.steamCmdAdapter.syncCachedItemToOutput(content.id, content.outputPath);
+
+      if (settings.autoGenerateNfo && existsSync(content.outputPath)) {
+        writeWorkshopMetadata({
+          workshopItem: content,
+          outputPath: content.outputPath,
+          downloadedAt: content.downloadedAt,
+          taskId: content.lastTaskId,
+          settings,
+        });
+      }
+
       context.downloadedContentStore.refreshDirectoryFacts(content.id, content.outputPath);
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'unknown NFO error';
-      console.warn(`failed to backfill NFO for workshop item ${content.id}: ${message}`);
+      const message = error instanceof Error ? error.message : 'unknown content backfill error';
+      console.warn(`failed to backfill content artifacts for workshop item ${content.id}: ${message}`);
     }
   });
 }

@@ -9,7 +9,7 @@ import type {
 } from '../../../packages/shared/src';
 import { DownloadProgressCoach, type DownloadCoachSummary } from './components/download-progress-coach';
 import type { StatusBannerContent } from './components/status-banner';
-import { clearTaskHistory, createTask, deleteDownloadedContent, deleteTask, fetchDownloadedContents, fetchSettings, fetchTasks, fetchWorkshopItems, formatApiError, rescanDownloadedContents, retryTask } from './lib/api';
+import { clearTaskHistory, createTask, deleteDownloadedContent, deleteTask, fetchDownloadedContents, fetchSettings, fetchTasks, fetchWorkshopItems, formatApiError, identifySteamWorkshopContents, rescanDownloadedContents, retryTask } from './lib/api';
 import { fallbackDownloadedContents, fallbackFeaturedItems, fallbackSettings, fallbackTasks } from './lib/fallback-data';
 import { ContentPage } from './pages/content-page';
 import { ExplorePage } from './pages/explore-page';
@@ -270,6 +270,7 @@ export function App() {
   const [deletingTaskId, setDeletingTaskId] = useState<string | null>(null);
   const [deletingContentId, setDeletingContentId] = useState<string | null>(null);
   const [isLibraryRescanning, setIsLibraryRescanning] = useState(false);
+  const [isSteamWorkshopIdentifying, setIsSteamWorkshopIdentifying] = useState(false);
   const [libraryActionMessage, setLibraryActionMessage] = useState<string | null>(null);
   const [isClearingHistory, setIsClearingHistory] = useState(false);
   const [lastTaskSyncAt, setLastTaskSyncAt] = useState<string | null>(null);
@@ -806,6 +807,28 @@ export function App() {
       });
   }
 
+  function handleIdentifySteamWorkshop() {
+    setIsSteamWorkshopIdentifying(true);
+    setLibraryActionError(null);
+    setLibraryActionMessage(null);
+    identifySteamWorkshopContents()
+      .then((response) => {
+        setDownloadedContents(response.items);
+        setLastLibrarySyncAt(new Date().toISOString());
+        if (response.errors.length) {
+          setLibraryActionError(`${response.errors.length} 个 Steam 目录识别失败。首个错误：${response.errors[0].id || response.errors[0].path} - ${response.errors[0].message}`);
+        } else {
+          setLibraryActionMessage(`已识别 ${response.importedCount} 个 Steam workshop 目录，并在原目录重新刮削。`);
+        }
+      })
+      .catch((error) => {
+        setLibraryActionError(formatApiError(error, 'Steam workshop 目录识别失败。'));
+      })
+      .finally(() => {
+        setIsSteamWorkshopIdentifying(false);
+      });
+  }
+
   function refreshCatalog() {
     setCatalogRequestVersion((current) => current + 1);
   }
@@ -998,6 +1021,7 @@ export function App() {
             deletingItemId={deletingContentId}
             isLoading={isLibraryLoading}
             isRescanning={isLibraryRescanning}
+            isIdentifyingSteamWorkshop={isSteamWorkshopIdentifying}
             lastSyncedAt={lastLibrarySyncAt}
             notices={libraryNotices}
             queueingItemIds={queueingIds}
@@ -1006,6 +1030,7 @@ export function App() {
               void syncLibrary();
             }}
             onRescan={handleRescanLibrary}
+            onIdentifySteamWorkshop={handleIdentifySteamWorkshop}
             onSelect={setSelectedContentId}
             onQueue={handleQueue}
             onDeleteRecord={handleDeleteContent}

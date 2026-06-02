@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { PassThrough } from 'node:stream';
@@ -163,4 +163,24 @@ test('SteamCmdAdapter keeps candidate successes pending until the whole batch se
   assert.equal(item222?.exitCode, 1);
   assert.equal(item111?.message, 'Cached credentials not found.');
   assert.equal(item222?.message, 'Cached credentials not found.');
+});
+
+test('SteamCmdAdapter can restore a cached workshop item into an existing output directory', () => {
+  const baseDir = mkdtempSync(resolve(tmpdir(), 'steamcmd-adapter-cache-sync-'));
+  const config = createConfig(baseDir);
+  const sourcePath = resolve(config.workshopContentDir, '444');
+  const outputPath = resolve(baseDir, 'downloads', '444');
+  mkdirSync(sourcePath, { recursive: true });
+  mkdirSync(outputPath, { recursive: true });
+  writeFileSync(resolve(sourcePath, 'preview.jpg'), 'preview', 'utf8');
+  writeFileSync(resolve(sourcePath, 'scene.pkg'), 'scene', 'utf8');
+  writeFileSync(resolve(outputPath, 'workshop.nfo'), 'existing metadata', 'utf8');
+
+  const adapter = new SteamCmdAdapter(config);
+  const result = adapter.syncCachedItemToOutput('444', outputPath);
+
+  assert.equal(result.synced, true);
+  assert.equal(existsSync(resolve(outputPath, 'preview.jpg')), true);
+  assert.equal(existsSync(resolve(outputPath, 'scene.pkg')), true);
+  assert.equal(existsSync(resolve(outputPath, 'workshop.nfo')), true);
 });

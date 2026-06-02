@@ -204,6 +204,8 @@ folder.jpg
 
 `poster.jpg` 和 `folder.jpg` 会优先从本地 `preview.jpg` 复制，不会额外远程下载图片。非视频项目，例如只包含 `scene.pkg` 的 Wallpaper Engine 场景，会保留归档型 `workshop.nfo`，Jellyfin 状态会显示为“不适用”。
 
+如果你的 Jellyfin 直接扫描 Steam workshop cache，例如 `/home/steam/Steam/steamapps/workshop/content/431960`，可以在内容库页点击“识别 Steam 目录”。面板会扫描当前 `WORKSHOP_CONTENT_DIR` 下的数字 ID 文件夹，读取本地 `project.json`，把这些文件夹导入/更新为内容库记录，并直接在原 Steam 文件夹里重新生成 `workshop.nfo`、`movie.nfo`、`poster.jpg`、`folder.jpg`。
+
 ## 内容库管理
 
 内容库首页可以做这些事：

@@ -154,6 +154,19 @@ export interface ContentLibraryRescanResponse {
   }>;
 }
 
+export interface ContentLibraryIdentifySteamResponse {
+  ok: boolean;
+  workshopContentDir: string;
+  scannedCount: number;
+  importedCount: number;
+  items: DownloadedContentItem[];
+  errors: Array<{
+    id: string;
+    path: string;
+    message: string;
+  }>;
+}
+
 export interface CreateTaskResponse {
   task: DownloadTask;
 }
