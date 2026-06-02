@@ -332,3 +332,8 @@ npm run build
 ### 代理应该怎么配？
 
 如果服务器访问 Steam 或创意工坊不稳定，可以在设置页启用代理，或通过 `.env` 设置 `PANEL_DEFAULT_PROXY_ENABLED=true` 和 `PANEL_DEFAULT_PROXY_URL`。代理地址要写成容器可以访问的地址，例如局域网代理 `http://127.0.0.1:7890`。
+
+
+## 友情链接
+[LINUX DO - 新的理想型社区](https://linux.do/)
+
