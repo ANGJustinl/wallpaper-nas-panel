@@ -1,5 +1,7 @@
 # Wallpaper Engine Workshop NAS Panel
 
+<img width="1618" height="926" alt="image" src="https://github.com/user-attachments/assets/78076406-833f-4095-a5fe-33f8cb532de2" />
+
 一个面向 NAS / 家庭服务器的 Wallpaper Engine 创意工坊下载与内容库面板。
 
 能做的事情 -> 搜索创意工坊、加入下载队列、查看任务状态、整理本地内容、生成 NFO/Jellyfin 旁挂文件; 用一个 WebUI 管理，适合部署在 Docker、NAS 或长期在线的 Linux 服务器上。
