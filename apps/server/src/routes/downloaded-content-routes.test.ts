@@ -168,7 +168,7 @@ test('POST /api/library/rescan restores missing output files from Steam workshop
   assert.match(JSON.stringify(response.body), /"jellyfinSidecarsStatus":"ready"/);
 });
 
-test('POST /api/library/identify-steam imports Steam workshop folders and scrapes sidecars in place', () => {
+test('POST /api/library/identify-steam imports Steam workshop folders and writes refreshed workshop descriptions', async () => {
   const { context, steamCmdConfig, taskStore } = createContext();
   const sourcePath = resolve(steamCmdConfig.workshopContentDir, '555');
   mkdirSync(sourcePath, { recursive: true });
@@ -189,18 +189,70 @@ test('POST /api/library/identify-steam imports Steam workshop folders and scrape
     previewUrl: 'https://images.steamusercontent.com/known-preview.jpg',
   });
 
-  const routes = createDownloadedContentRoutes(context);
+  const routes = createDownloadedContentRoutes(context, {
+    fetchWorkshopItemDetails: async (ids) => {
+      assert.deepEqual(ids, ['555']);
+      return new Map<string, WorkshopItemSummary>([
+        ['555', {
+          ...createWorkshopItem('555'),
+          title: 'Fresh Steam Title',
+          author: 'Steam Workshop',
+          previewUrl: 'https://images.steamusercontent.com/fresh-preview.jpg',
+          rating: 0,
+          tags: ['Anime', 'Video', 'Wallpaper', 'Mature'],
+          description: 'Fresh workshop description from Steam.',
+        }],
+      ]);
+    },
+  });
   const response = createResponse();
-  routes.identifySteamWorkshopContents({} as Request, response);
+  await routes.identifySteamWorkshopContents({} as Request, response);
 
   assert.equal(response.statusCode, 200);
   assert.equal(existsSync(resolve(sourcePath, 'movie.nfo')), true);
   assert.equal(existsSync(resolve(sourcePath, 'poster.jpg')), true);
-  assert.match(readFileSync(resolve(sourcePath, 'movie.nfo'), 'utf8'), /<title>Route Test Wallpaper<\/title>/);
-  assert.match(readFileSync(resolve(sourcePath, 'movie.nfo'), 'utf8'), /<thumb>poster\.jpg<\/thumb>/);
+  const movieNfo = readFileSync(resolve(sourcePath, 'movie.nfo'), 'utf8');
+  assert.match(movieNfo, /<title>Fresh Steam Title<\/title>/);
+  assert.match(movieNfo, /<plot>Fresh workshop description from Steam\.<\/plot>/);
+  assert.match(movieNfo, /<thumb>poster\.jpg<\/thumb>/);
   assert.match(JSON.stringify(response.body), /"importedCount":1/);
+  assert.match(JSON.stringify(response.body), /"detailsFetchedCount":1/);
   assert.match(JSON.stringify(response.body), /"author":"Known Creator"/);
   assert.match(JSON.stringify(response.body), /"rating":4.5/);
   assert.match(JSON.stringify(response.body), new RegExp(`"outputPath":"${sourcePath.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"`));
   assert.match(JSON.stringify(response.body), /"jellyfinSidecarsStatus":"ready"/);
+});
+
+test('POST /api/library/identify-steam falls back to project description when Steam details are missing', async () => {
+  const { context, steamCmdConfig, downloadedContentStore } = createContext();
+  const sourcePath = resolve(steamCmdConfig.workshopContentDir, '777');
+  mkdirSync(sourcePath, { recursive: true });
+  writeFileSync(resolve(sourcePath, 'loop.mp4'), 'video', 'utf8');
+  writeFileSync(resolve(sourcePath, 'preview.jpg'), 'preview', 'utf8');
+  writeFileSync(resolve(sourcePath, 'movie.nfo'), '<movie><plot>从workshop识别</plot></movie>', 'utf8');
+  writeFileSync(resolve(sourcePath, 'project.json'), JSON.stringify({
+    title: 'Project Title',
+    description: 'Project imported description.',
+    type: 'video',
+    tags: ['Video'],
+  }), 'utf8');
+  downloadedContentStore.recordContent({
+    ...createWorkshopItem('777'),
+    description: '从workshop识别',
+  }, sourcePath, {
+    downloadedAt: '2026-06-01T10:00:00.000Z',
+    lastTaskId: 'steam-workshop-777',
+  });
+
+  const routes = createDownloadedContentRoutes(context, {
+    fetchWorkshopItemDetails: async () => new Map<string, WorkshopItemSummary>(),
+  });
+  const response = createResponse();
+  await routes.identifySteamWorkshopContents({} as Request, response);
+
+  assert.equal(response.statusCode, 200);
+  const movieNfo = readFileSync(resolve(sourcePath, 'movie.nfo'), 'utf8');
+  assert.match(movieNfo, /<plot>Project imported description\.<\/plot>/);
+  assert.doesNotMatch(movieNfo, /从workshop识别/);
+  assert.match(JSON.stringify(response.body), /"detailsMissingCount":1/);
 });

@@ -159,6 +159,9 @@ export interface ContentLibraryIdentifySteamResponse {
   workshopContentDir: string;
   scannedCount: number;
   importedCount: number;
+  detailsFetchedCount?: number;
+  detailsMissingCount?: number;
+  detailLookupError?: string;
   items: DownloadedContentItem[];
   errors: Array<{
     id: string;

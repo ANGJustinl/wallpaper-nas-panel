@@ -100,7 +100,7 @@ function identifyFolder(workshopItemId: string, outputPath: string): IdentifiedS
     previewUrl: '',
     rating: 0,
     tags,
-    description: toStringValue(project.description) || '从本地 Steam workshop 目录识别的内容。',
+    description: toStringValue(project.description) || '本地 project.json 未提供描述。',
     source: 'featured',
     metadata: normalizeWorkshopMetadata(undefined, tags),
   };

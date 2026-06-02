@@ -32,6 +32,26 @@ interface WorkshopBrowseState {
   creator_player_link_details?: Record<string, WorkshopCreatorDetails> | WorkshopCreatorDetails[];
 }
 
+interface PublishedFileTag {
+  tag?: string;
+  display_name?: string;
+}
+
+interface PublishedFileDetails {
+  publishedfileid?: string;
+  result?: number;
+  title?: string;
+  description?: string;
+  preview_url?: string;
+  tags?: PublishedFileTag[];
+}
+
+interface PublishedFileDetailsPayload {
+  response?: {
+    publishedfiledetails?: PublishedFileDetails[];
+  };
+}
+
 function mapSort(sort: string, hasQuery: boolean) {
   switch (sort) {
     case 'vote':
@@ -183,6 +203,16 @@ function normalizeDescription(value: string | undefined) {
   return trimmed || '暂无简介。';
 }
 
+function normalizeSteamDescription(value: string | undefined) {
+  return (value ?? '')
+    .replace(/\[url=([^\]]+)\]([\s\S]*?)\[\/url\]/gi, '$2 ($1)')
+    .replace(/\[img\][\s\S]*?\[\/img\]/gi, '')
+    .replace(/\[[^\]]+\]/g, '')
+    .replace(/\r\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
 function normalizeRating(value: number | undefined) {
   if (!Number.isFinite(value)) {
     return 0;
@@ -246,4 +276,56 @@ export async function fetchWorkshopItems(input: WorkshopBrowseFilters, settings:
   });
 
   return results.slice(0, 30);
+}
+
+export async function fetchWorkshopItemDetails(ids: string[], settings: SettingsSnapshot): Promise<Map<string, WorkshopItemSummary>> {
+  const uniqueIds = [...new Set(ids.map((id) => id.trim()).filter((id) => /^\d+$/.test(id)))];
+  const requestOptions = {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36',
+      'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    dispatcher: settings.proxy.enabled && settings.proxy.url ? new ProxyAgent(settings.proxy.url) : undefined,
+  };
+  const details = new Map<string, WorkshopItemSummary>();
+
+  for (let offset = 0; offset < uniqueIds.length; offset += 50) {
+    const batch = uniqueIds.slice(offset, offset + 50);
+    const body = new URLSearchParams({ itemcount: String(batch.length), format: 'json' });
+    batch.forEach((id, index) => body.append(`publishedfileids[${index}]`, id));
+
+    const response = await request('https://api.steampowered.com/ISteamRemoteStorage/GetPublishedFileDetails/v1/', {
+      ...requestOptions,
+      method: 'POST',
+      body: body.toString(),
+    });
+    if (response.statusCode >= 400) {
+      throw new Error(`steam workshop details request failed with status ${response.statusCode}`);
+    }
+
+    const payload = JSON.parse(await response.body.text()) as PublishedFileDetailsPayload;
+    payload.response?.publishedfiledetails?.forEach((entry) => {
+      const id = entry.publishedfileid?.trim() ?? '';
+      const title = entry.title?.trim() ?? '';
+      if (!id || entry.result !== 1 || !title) {
+        return;
+      }
+
+      const tags = entry.tags?.map((tag) => tag.display_name || tag.tag || '').filter(Boolean) ?? [];
+      details.set(id, {
+        id,
+        title,
+        author: 'Steam Workshop',
+        previewUrl: entry.preview_url?.trim() ?? '',
+        rating: 0,
+        tags,
+        description: normalizeSteamDescription(entry.description),
+        source: 'search',
+        metadata: normalizeWorkshopMetadata(undefined, tags),
+      });
+    });
+  }
+
+  return details;
 }

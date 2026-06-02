@@ -4,8 +4,9 @@ import type { Request, Response } from 'express';
 import type { AppContext } from '../app-context';
 import { writeWorkshopMetadata } from '../modules/nfo-writer';
 import { identifySteamWorkshopFolders } from '../modules/steam-workshop-library';
+import { fetchWorkshopItemDetails } from '../modules/workshop-fetcher';
 import { normalizeWorkshopMetadata } from '../modules/workshop-item-metadata';
-import type { WorkshopItemSummary } from '../../../../packages/shared/src';
+import type { SettingsSnapshot, WorkshopItemSummary } from '../../../../packages/shared/src';
 
 function uniqueValues(values: string[]) {
   const seen = new Set<string>();
@@ -25,28 +26,62 @@ function isFallbackAuthor(value: string) {
   return !value.trim() || value === 'Steam Workshop' || value === '本地 Steam 目录' || value === '未知作者';
 }
 
+function isFallbackDescription(value: string) {
+  const normalized = value.trim();
+  const compact = normalized.replace(/\s+/g, '').toLowerCase();
+  return !normalized
+    || normalized === '暂无简介。'
+    || normalized === '从本地 Steam workshop 目录识别的内容。'
+    || normalized === '从本地 Steam workshop 目录识别的内容'
+    || normalized === '本地 project.json 未提供描述。'
+    || compact.includes('从workshop识别')
+    || compact.includes('从本地steamworkshop目录识别');
+}
+
+function pickFirstMeaningfulDescription(values: string[]) {
+  return values.find((value) => !isFallbackDescription(value)) ?? values.find((value) => value.trim()) ?? '本地 project.json 未提供描述。';
+}
+
+export type WorkshopDetailsFetcher = (ids: string[], settings: SettingsSnapshot) => Promise<Map<string, WorkshopItemSummary>>;
+
+interface DownloadedContentRouteOptions {
+  fetchWorkshopItemDetails?: WorkshopDetailsFetcher;
+}
+
 function mergeIdentifiedWorkshopItem(
   identifiedItem: WorkshopItemSummary,
   existingItem: WorkshopItemSummary | null,
   taskItem: WorkshopItemSummary | null,
+  refreshedItem: WorkshopItemSummary | null,
 ): WorkshopItemSummary {
-  const preferredItem = taskItem ?? existingItem ?? identifiedItem;
+  const preferredItem = refreshedItem ?? taskItem ?? existingItem ?? identifiedItem;
   const tags = uniqueValues([
+    ...(refreshedItem?.tags ?? []),
     ...(taskItem?.tags ?? []),
     ...(existingItem?.tags ?? []),
     ...identifiedItem.tags,
   ]);
-  const author = taskItem?.author && !isFallbackAuthor(taskItem.author)
-    ? taskItem.author
-    : existingItem?.author && !isFallbackAuthor(existingItem.author)
-      ? existingItem.author
-      : identifiedItem.author;
-  const previewUrl = taskItem?.previewUrl || existingItem?.previewUrl || identifiedItem.previewUrl;
-  const rating = taskItem?.rating && taskItem.rating > 0
-    ? taskItem.rating
-    : existingItem?.rating && existingItem.rating > 0
-      ? existingItem.rating
-      : identifiedItem.rating;
+  const author = refreshedItem?.author && !isFallbackAuthor(refreshedItem.author)
+    ? refreshedItem.author
+    : taskItem?.author && !isFallbackAuthor(taskItem.author)
+      ? taskItem.author
+      : existingItem?.author && !isFallbackAuthor(existingItem.author)
+        ? existingItem.author
+        : identifiedItem.author;
+  const previewUrl = refreshedItem?.previewUrl || taskItem?.previewUrl || existingItem?.previewUrl || identifiedItem.previewUrl;
+  const rating = refreshedItem?.rating && refreshedItem.rating > 0
+    ? refreshedItem.rating
+    : taskItem?.rating && taskItem.rating > 0
+      ? taskItem.rating
+      : existingItem?.rating && existingItem.rating > 0
+        ? existingItem.rating
+        : identifiedItem.rating;
+  const description = pickFirstMeaningfulDescription([
+    refreshedItem?.description ?? '',
+    taskItem?.description ?? '',
+    existingItem?.description ?? '',
+    identifiedItem.description,
+  ]);
 
   return {
     ...identifiedItem,
@@ -55,13 +90,15 @@ function mergeIdentifiedWorkshopItem(
     previewUrl,
     rating,
     tags,
-    description: preferredItem.description || identifiedItem.description,
+    description,
     source: preferredItem.source ?? identifiedItem.source,
-    metadata: normalizeWorkshopMetadata(taskItem?.metadata ?? existingItem?.metadata ?? identifiedItem.metadata, tags),
+    metadata: normalizeWorkshopMetadata(refreshedItem?.metadata ?? taskItem?.metadata ?? existingItem?.metadata ?? identifiedItem.metadata, tags),
   };
 }
 
-export function createDownloadedContentRoutes(context: AppContext) {
+export function createDownloadedContentRoutes(context: AppContext, options: DownloadedContentRouteOptions = {}) {
+  const fetchDetails = options.fetchWorkshopItemDetails ?? fetchWorkshopItemDetails;
+
   function listContents(_request: Request, response: Response) {
     response.json({ items: context.downloadedContentStore.listContents() });
   }
@@ -145,7 +182,7 @@ export function createDownloadedContentRoutes(context: AppContext) {
     });
   }
 
-  function identifySteamWorkshopContents(_request: Request, response: Response) {
+  async function identifySteamWorkshopContents(_request: Request, response: Response) {
     const settings = context.settingsStore.getSnapshot();
     const scrapeSettings = {
       ...settings,
@@ -156,12 +193,25 @@ export function createDownloadedContentRoutes(context: AppContext) {
     };
     const identification = identifySteamWorkshopFolders(context.steamCmdConfig.workshopContentDir);
     const errors = [...identification.errors];
+    let detailLookupError = '';
     let importedCount = 0;
+    let refreshedItems = new Map<string, WorkshopItemSummary>();
+
+    try {
+      refreshedItems = await fetchDetails(identification.folders.map(({ item }) => item.id), settings);
+    } catch (error) {
+      detailLookupError = error instanceof Error ? error.message : 'Unknown Steam workshop details lookup error';
+    }
 
     identification.folders.forEach(({ item, outputPath, discoveredAt }) => {
       const task = context.taskStore.getTaskByWorkshopItemId(item.id);
       const taskItem = task ? context.taskStore.getTaskWorkshopItem(task.id) : null;
-      const mergedItem = mergeIdentifiedWorkshopItem(item, context.downloadedContentStore.getContent(item.id), taskItem);
+      const mergedItem = mergeIdentifiedWorkshopItem(
+        item,
+        context.downloadedContentStore.getContent(item.id),
+        taskItem,
+        refreshedItems.get(item.id) ?? null,
+      );
       const lastTaskId = task?.id ?? `steam-workshop-${item.id}`;
 
       try {
@@ -196,6 +246,9 @@ export function createDownloadedContentRoutes(context: AppContext) {
       workshopContentDir: identification.workshopContentDir,
       scannedCount: identification.scannedCount,
       importedCount,
+      detailsFetchedCount: refreshedItems.size,
+      detailsMissingCount: Math.max(0, identification.folders.length - refreshedItems.size),
+      detailLookupError: detailLookupError || undefined,
       items: context.downloadedContentStore.listContents(),
       errors,
     });

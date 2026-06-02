@@ -818,7 +818,10 @@ export function App() {
         if (response.errors.length) {
           setLibraryActionError(`${response.errors.length} 个 Steam 目录识别失败。首个错误：${response.errors[0].id || response.errors[0].path} - ${response.errors[0].message}`);
         } else {
-          setLibraryActionMessage(`已识别 ${response.importedCount} 个 Steam workshop 目录，并在原目录重新刮削。`);
+          const detailsSummary = response.detailLookupError
+            ? `Steam 详情补查失败，已使用本地 project.json：${response.detailLookupError}`
+            : `已补到 ${response.detailsFetchedCount ?? 0} 个工坊详情，${response.detailsMissingCount ?? 0} 个使用本地 project.json。`;
+          setLibraryActionMessage(`已识别 ${response.importedCount} 个 Steam workshop 目录，并在原目录重新刮削。${detailsSummary}`);
         }
       })
       .catch((error) => {
