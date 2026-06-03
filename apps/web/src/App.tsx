@@ -264,6 +264,11 @@ export function App() {
   const [tasks, setTasks] = useState<DownloadTask[]>(fallbackTasks);
   const [downloadedContents, setDownloadedContents] = useState<DownloadedContentItem[]>([]);
   const [selectedContentId, setSelectedContentId] = useState<string | null>(null);
+  const [libraryPage, setLibraryPage] = useState(1);
+  const [libraryPageSize, setLibraryPageSize] = useState(50);
+  const [libraryQuery, setLibraryQuery] = useState('');
+  const [libraryTotal, setLibraryTotal] = useState(0);
+  const [libraryTotalPages, setLibraryTotalPages] = useState(1);
   const [settings, setSettings] = useState<SettingsSnapshot>(fallbackSettings);
   const [runtime, setRuntime] = useState<DownloaderRuntimeSnapshot>(fallbackRuntime);
   const [retryingTaskId, setRetryingTaskId] = useState<string | null>(null);
@@ -310,12 +315,19 @@ export function App() {
     }
   }
 
-  async function syncLibrary() {
+  async function syncLibrary(options: { page?: number; pageSize?: number; query?: string } = {}) {
     setIsLibraryLoading(true);
+    const page = options.page ?? libraryPage;
+    const pageSize = options.pageSize ?? libraryPageSize;
+    const query = options.query ?? libraryQuery;
 
     try {
-      const response = await fetchDownloadedContents();
+      const response = await fetchDownloadedContents({ page, pageSize, query });
       setDownloadedContents(response.items);
+      setLibraryPage(response.page);
+      setLibraryPageSize(response.pageSize);
+      setLibraryTotal(response.total);
+      setLibraryTotalPages(response.totalPages);
       setSelectedContentId((current) => {
         if (current && response.items.some((item) => item.id === current)) {
           return current;
@@ -328,6 +340,8 @@ export function App() {
       setIsLibraryFallback(false);
     } catch (error) {
       setDownloadedContents(fallbackDownloadedContents);
+      setLibraryTotal(fallbackDownloadedContents.length);
+      setLibraryTotalPages(1);
       setSelectedContentId((current) => {
         if (current && fallbackDownloadedContents.some((item) => item.id === current)) {
           return current;
@@ -411,11 +425,15 @@ export function App() {
       setIsLibraryLoading(true);
 
       try {
-        const response = await fetchDownloadedContents();
+        const response = await fetchDownloadedContents({ page: libraryPage, pageSize: libraryPageSize, query: libraryQuery });
         if (!active) {
           return;
         }
         setDownloadedContents(response.items);
+        setLibraryPage(response.page);
+        setLibraryPageSize(response.pageSize);
+        setLibraryTotal(response.total);
+        setLibraryTotalPages(response.totalPages);
         setSelectedContentId((current) => {
           if (current && response.items.some((item) => item.id === current)) {
             return current;
@@ -429,6 +447,8 @@ export function App() {
       } catch (error) {
         if (active) {
           setDownloadedContents(fallbackDownloadedContents);
+          setLibraryTotal(fallbackDownloadedContents.length);
+          setLibraryTotalPages(1);
           setSelectedContentId((current) => {
             if (current && fallbackDownloadedContents.some((item) => item.id === current)) {
               return current;
@@ -462,7 +482,7 @@ export function App() {
       window.clearInterval(taskTimer);
       window.clearInterval(libraryTimer);
     };
-  }, []);
+  }, [libraryPage, libraryPageSize, libraryQuery]);
 
   useEffect(() => {
     let active = true;
@@ -776,6 +796,7 @@ export function App() {
       .then(() => {
         setDownloadedContents((current) => current.filter((item) => item.id !== workshopItemId));
         setLibraryActionMessage(deleteFiles ? '内容记录与本地文件已删除。' : '内容记录已移除，本地文件已保留。');
+        void syncLibrary();
       })
       .catch((error) => {
         setLibraryActionError(formatApiError(error, '移除内容记录失败。'));
@@ -791,13 +812,13 @@ export function App() {
     setLibraryActionMessage(null);
     rescanDownloadedContents()
       .then((response) => {
-        setDownloadedContents(response.items);
         setLastLibrarySyncAt(new Date().toISOString());
         if (response.errors.length) {
           setLibraryActionError(`${response.errors.length} 个内容项重扫失败。首个错误：${response.errors[0].title} - ${response.errors[0].message}`);
         } else {
           setLibraryActionMessage(`内容库已重扫，更新 ${response.updatedCount} 个项目。`);
         }
+        void syncLibrary();
       })
       .catch((error) => {
         setLibraryActionError(formatApiError(error, '内容库重扫失败。'));
@@ -813,7 +834,6 @@ export function App() {
     setLibraryActionMessage(null);
     identifySteamWorkshopContents()
       .then((response) => {
-        setDownloadedContents(response.items);
         setLastLibrarySyncAt(new Date().toISOString());
         if (response.errors.length) {
           setLibraryActionError(`${response.errors.length} 个 Steam 目录识别失败。首个错误：${response.errors[0].id || response.errors[0].path} - ${response.errors[0].message}`);
@@ -823,6 +843,7 @@ export function App() {
             : `已补到 ${response.detailsFetchedCount ?? 0} 个工坊详情，${response.detailsMissingCount ?? 0} 个使用本地 project.json。`;
           setLibraryActionMessage(`已识别 ${response.importedCount} 个 Steam workshop 目录，并在原目录重新刮削。${detailsSummary}`);
         }
+        void syncLibrary();
       })
       .catch((error) => {
         setLibraryActionError(formatApiError(error, 'Steam workshop 目录识别失败。'));
@@ -834,6 +855,20 @@ export function App() {
 
   function refreshCatalog() {
     setCatalogRequestVersion((current) => current + 1);
+  }
+
+  function handleLibrarySearch(query: string) {
+    setLibraryQuery(query);
+    setLibraryPage(1);
+  }
+
+  function handleLibraryPageChange(page: number) {
+    setLibraryPage(Math.max(1, Math.min(libraryTotalPages, page)));
+  }
+
+  function handleLibraryPageSizeChange(pageSize: number) {
+    setLibraryPageSize(pageSize);
+    setLibraryPage(1);
   }
 
   const exploreNotices = useMemo<StatusBannerContent[]>(() => {
@@ -1029,11 +1064,19 @@ export function App() {
             notices={libraryNotices}
             queueingItemIds={queueingIds}
             deleteFilesDefault={settings.contentLibrary.deleteFilesDefault}
+            page={libraryPage}
+            pageSize={libraryPageSize}
+            total={libraryTotal}
+            totalPages={libraryTotalPages}
+            query={libraryQuery}
             onRefresh={() => {
               void syncLibrary();
             }}
             onRescan={handleRescanLibrary}
             onIdentifySteamWorkshop={handleIdentifySteamWorkshop}
+            onSearch={handleLibrarySearch}
+            onPageChange={handleLibraryPageChange}
+            onPageSizeChange={handleLibraryPageSizeChange}
             onSelect={setSelectedContentId}
             onQueue={handleQueue}
             onDeleteRecord={handleDeleteContent}

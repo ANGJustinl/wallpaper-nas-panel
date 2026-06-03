@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { DownloaderRuntimeSnapshot, SteamLoginRequest, SteamLoginState } from '../../../../packages/shared/src';
 import { StatusBanner } from '../components/status-banner';
+import { TerminalLog } from '../components/terminal-log';
 import { fetchSteamLoginState, formatApiError, triggerSteamLogin } from '../lib/api';
 
 interface SteamLoginPageProps {
@@ -204,6 +205,8 @@ export function SteamLoginPage({ runtime, onBack }: SteamLoginPageProps) {
 
           {state.errorMessage ? <p className="inspector-inline-error">最近登录错误：{state.errorMessage}</p> : null}
           {!runtime.available ? <p className="inspector-inline-error">运行时状态：不可用，{runtime.availabilityError || '下载器运行时未就绪。'}</p> : null}
+
+          <TerminalLog mode="login" title="SteamCMD 登录输出" />
         </aside>
       </div>
     </section>

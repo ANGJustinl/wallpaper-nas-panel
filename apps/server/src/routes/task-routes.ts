@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import type { WorkshopItemSummary } from '../../../../packages/shared/src';
 import type { AppContext } from '../app-context';
 import { normalizeWorkshopMetadata } from '../modules/workshop-item-metadata';
+import { createLogsResponse, readPositiveInteger, streamLogs } from './steamcmd-log-stream';
 
 function readString(value: unknown, fallback = '') {
   return typeof value === 'string' ? value : fallback;
@@ -16,6 +17,36 @@ function readStringList(value: unknown) {
 export function createTaskRoutes(context: AppContext) {
   function listTasks(_request: Request, response: Response) {
     response.json({ tasks: context.taskStore.listTasks(), worker: context.workerStateStore.getSnapshot() });
+  }
+
+  function listTaskLogs(request: Request, response: Response) {
+    const taskId = typeof request.params.id === 'string' ? request.params.id : '';
+    if (!taskId || !context.taskStore.getTask(taskId)) {
+      response.status(404).json({ error: 'Task not found' });
+      return;
+    }
+
+    const after = readPositiveInteger(request.query.after, 0);
+    const limit = readPositiveInteger(request.query.limit, 500, 1000);
+    const events = context.steamCmdLogStore.listTaskLogs(taskId, { after, limit });
+    response.json(createLogsResponse(events));
+  }
+
+  function streamTaskLogs(request: Request, response: Response) {
+    const taskId = typeof request.params.id === 'string' ? request.params.id : '';
+    if (!taskId || !context.taskStore.getTask(taskId)) {
+      response.status(404).json({ error: 'Task not found' });
+      return;
+    }
+
+    const after = readPositiveInteger(request.query.after, 0);
+    const initialEvents = context.steamCmdLogStore.listTaskLogs(taskId, { after, limit: 1000 });
+    streamLogs(
+      response,
+      context.steamCmdLogStore,
+      initialEvents,
+      (event) => event.scope === 'download' && event.taskId === taskId,
+    );
   }
 
   function createTask(request: Request, response: Response) {
@@ -84,5 +115,5 @@ export function createTaskRoutes(context: AppContext) {
     response.json({ ok: true, deletedCount });
   }
 
-  return { listTasks, createTask, retryTask, deleteTask, clearHistory };
+  return { listTasks, listTaskLogs, streamTaskLogs, createTask, retryTask, deleteTask, clearHistory };
 }

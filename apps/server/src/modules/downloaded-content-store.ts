@@ -39,6 +39,10 @@ function parseJsonValue<T>(input: string, fallback: T) {
   }
 }
 
+function escapeLikeValue(value: string) {
+  return value.replace(/[\\%_]/g, (match) => `\\${match}`);
+}
+
 function inspectDirectory(outputPath: string) {
   const resolvedPath = resolve(outputPath);
 
@@ -119,6 +123,65 @@ export class DownloadedContentStore {
       .all() as DownloadedContentRow[];
 
     return rows.map((row) => this.toItem(row));
+  }
+
+  listContentsPage(options: { page?: number; pageSize?: number; query?: string } = {}) {
+    const pageSize = Math.max(1, Math.min(200, Math.floor(options.pageSize ?? 50)));
+    const requestedPage = Math.max(1, Math.floor(options.page ?? 1));
+    const query = options.query?.trim() ?? '';
+    const like = `%${escapeLikeValue(query.toLowerCase())}%`;
+    const whereClause = query
+      ? `
+        WHERE
+          lower(workshop_item_id) LIKE @like ESCAPE '\\'
+          OR lower(workshop_title) LIKE @like ESCAPE '\\'
+          OR lower(author) LIKE @like ESCAPE '\\'
+      `
+      : '';
+    const totalRow = this.database.prepare(
+      `
+        SELECT COUNT(*) AS total
+        FROM downloaded_contents
+        ${whereClause}
+      `,
+    ).get({ like }) as { total: number };
+    const total = totalRow.total;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const page = Math.min(requestedPage, totalPages);
+    const offset = (page - 1) * pageSize;
+    const rows = this.database.prepare(
+      `
+        SELECT
+          workshop_item_id,
+          workshop_title,
+          author,
+          preview_url,
+          rating,
+          tags_json,
+          description,
+          source,
+          metadata_json,
+          output_path,
+          downloaded_at,
+          entry_count,
+          file_count,
+          total_bytes,
+          last_task_id
+        FROM downloaded_contents
+        ${whereClause}
+        ORDER BY downloaded_at DESC, workshop_title COLLATE NOCASE ASC
+        LIMIT @page_size
+        OFFSET @offset
+      `,
+    ).all({ like, page_size: pageSize, offset }) as DownloadedContentRow[];
+
+    return {
+      items: rows.map((row) => this.toItem(row)),
+      page,
+      pageSize,
+      total,
+      totalPages,
+    };
   }
 
   getContent(workshopItemId: string) {

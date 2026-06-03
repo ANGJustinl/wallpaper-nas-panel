@@ -14,6 +14,7 @@ import { SettingsStore } from './settings-store';
 import { SteamCmdAdapter } from './steamcmd-adapter';
 import type { SteamCmdConfig } from './steamcmd-config';
 import { SteamCmdSocketLock } from './steamcmd-socket-lock';
+import { SteamCmdLogStore } from './steamcmd-log-store';
 import { TaskStore } from './task-store';
 import { WorkerStateStore } from './worker-state-store';
 import { WORKSHOP_NFO_FILENAME } from './nfo-writer';
@@ -149,6 +150,7 @@ test('DownloadQueue writes NFO when a queued download succeeds', async () => {
     settingsStore,
     workerStateStore,
     new SteamCmdSocketLock(config.lockSocketPath),
+    new SteamCmdLogStore(database),
     20,
   );
 
@@ -171,6 +173,8 @@ test('DownloadQueue writes NFO when a queued download succeeds', async () => {
     assert.equal(content?.fileCount, 7);
     assert.equal(content?.libraryHealth.playableFileCount, 1);
     assert.equal(content?.libraryHealth.jellyfinSidecarsStatus, 'ready');
+    const logs = new SteamCmdLogStore(database).listTaskLogs(task?.id ?? '');
+    assert.ok(logs.some((entry) => /正在下载项目 111/.test(entry.message)));
   } finally {
     queue.stopWorkerLoop('test done');
   }

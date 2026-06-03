@@ -38,6 +38,8 @@ describe('App shell', () => {
     expect(screen.getByLabelText(/steam 账号/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/steam 密码/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/steam 令牌/i)).toBeInTheDocument();
+    expect(screen.getByText(/SteamCMD 登录输出/i)).toBeInTheDocument();
+    expect(await screen.findByText(/开始登录 Steam 账号：anonymous/i)).toBeInTheDocument();
   });
 
   it('blocks steam login submission when steamcmd runtime is unavailable', async () => {
@@ -149,6 +151,8 @@ describe('App shell', () => {
     expect(screen.getByText(/处理中/i)).toBeInTheDocument();
     expect(screen.getAllByText(/test-runner/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/正在下载项目 3648823629/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /SteamCMD 输出/i })).toBeInTheDocument();
+    expect(await screen.findByText(/Downloading item 3691746167/i)).toBeInTheDocument();
   });
 
   it('lets the user delete a history task record', async () => {
@@ -174,6 +178,69 @@ describe('App shell', () => {
     expect(screen.getByText(/查看创意工坊页面/i)).toBeInTheDocument();
     expect(screen.getByText(/Miscellaneous/i)).toBeInTheDocument();
     expect(screen.getAllByText(/Ultrawide 3440 x 1440/i).length).toBeGreaterThan(0);
+    expect(screen.queryByText(/文件管理器/i)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /^文件$/i }));
+    expect(screen.getByText(/文件管理器/i)).toBeInTheDocument();
+    const loopRow = await screen.findByRole('button', { name: /loop\.mp4/i });
+    const movieRow = screen.getByRole('button', { name: /movie\.nfo/i });
+    await user.click(loopRow);
+    expect(loopRow).toHaveAttribute('aria-pressed', 'true');
+
+    const writeText = vi.fn(async () => undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText },
+    });
+    fireEvent.contextMenu(loopRow);
+    await user.click(screen.getByRole('menuitem', { name: /复制宿主路径/i }));
+    expect(writeText).toHaveBeenCalledWith(expect.stringContaining('/loop.mp4'));
+
+    fireEvent.contextMenu(movieRow);
+    await user.click(screen.getByRole('menuitem', { name: /^删除$/i }));
+    expect(screen.getByRole('dialog', { name: /确认删除文件/i })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /删除文件/i }));
+    await waitFor(() => {
+      expect(screen.queryByRole('button', { name: /movie\.nfo/i })).not.toBeInTheDocument();
+    });
+
+    await user.dblClick(screen.getByRole('button', { name: /assets/i }));
+    expect(await screen.findByText(/当前目录为空/i)).toBeInTheDocument();
+  });
+
+  it('keeps content library pagination and search server-side', async () => {
+    const user = userEvent.setup();
+    render(<App />);
+
+    await user.click(screen.getByRole('link', { name: /内容库/i }));
+    await screen.findByRole('heading', { name: /已下载内容管理/i });
+
+    const fetchMock = vi.mocked(globalThis.fetch);
+    fetchMock.mockClear();
+    await user.type(screen.getByPlaceholderText(/标题、作者或 Workshop ID/i), 'Neon');
+    await user.click(screen.getByRole('button', { name: /^搜索$/i }));
+
+    await waitFor(() => {
+      const libraryRequest = fetchMock.mock.calls
+        .map(([input]) => String(input))
+        .find((value) => value.includes('/api/library?'));
+      expect(libraryRequest).toBeDefined();
+      const params = new URL(libraryRequest ?? '', 'http://localhost').searchParams;
+      expect(params.get('q')).toBe('Neon');
+      expect(params.get('page')).toBe('1');
+    });
+
+    fetchMock.mockClear();
+    await user.selectOptions(screen.getByLabelText(/每页/i), '100');
+
+    await waitFor(() => {
+      const libraryRequest = fetchMock.mock.calls
+        .map(([input]) => String(input))
+        .find((value) => value.includes('/api/library?'));
+      expect(libraryRequest).toBeDefined();
+      const params = new URL(libraryRequest ?? '', 'http://localhost').searchParams;
+      expect(params.get('pageSize')).toBe('100');
+      expect(params.get('q')).toBe('Neon');
+    });
   });
 
   it('lets the user remove a downloaded content record while keeping files by default', async () => {
@@ -192,6 +259,7 @@ describe('App shell', () => {
     });
 
     const deleteRequest = vi.mocked(globalThis.fetch).mock.calls
+      .filter(([, init]) => init?.method === 'DELETE')
       .map(([input]) => String(input))
       .find((value) => value.includes('/api/library/3648823629'));
     expect(deleteRequest).toBeDefined();
@@ -210,6 +278,7 @@ describe('App shell', () => {
 
     await waitFor(() => {
       const deleteRequest = vi.mocked(globalThis.fetch).mock.calls
+        .filter(([, init]) => init?.method === 'DELETE')
         .map(([input]) => String(input))
         .find((value) => value.includes('/api/library/3648823629'));
       expect(deleteRequest).toContain('deleteFiles=true');

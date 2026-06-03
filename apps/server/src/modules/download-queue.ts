@@ -11,6 +11,7 @@ import { writeWorkshopMetadata } from './nfo-writer';
 import { SettingsStore } from './settings-store';
 import { SteamCmdAdapter, type SteamCmdBatchItemExecutionResult, type SteamCmdProgressEvent } from './steamcmd-adapter';
 import { type SteamCmdSocketLockHandle, SteamCmdSocketLock } from './steamcmd-socket-lock';
+import { SteamCmdLogStore } from './steamcmd-log-store';
 import { TaskStore } from './task-store';
 import { WorkerStateStore } from './worker-state-store';
 
@@ -28,6 +29,7 @@ export class DownloadQueue {
     private readonly settingsStore: SettingsStore,
     private readonly workerStateStore: WorkerStateStore,
     private readonly steamCmdLock: SteamCmdSocketLock,
+    private readonly steamCmdLogStore: SteamCmdLogStore,
     private readonly batchMaxItems: number,
   ) {}
 
@@ -50,6 +52,13 @@ export class DownloadQueue {
     };
 
     this.taskStore.upsertTask(task, item);
+    this.steamCmdLogStore.append({
+      scope: 'download',
+      source: 'system',
+      taskId: task.id,
+      workshopItemId: item.id,
+      message: `任务已加入队列：${item.title} (${item.id})`,
+    });
     this.scheduleProcessing();
     return task;
   }
@@ -145,6 +154,15 @@ export class DownloadQueue {
 
       await lockHandle.updateMetadata({ taskIds: claimedTasks.map((task) => task.id) });
       this.setActiveTask(claimedTasks[0]);
+      claimedTasks.forEach((task) => {
+        this.steamCmdLogStore.append({
+          scope: 'download',
+          source: 'system',
+          taskId: task.id,
+          workshopItemId: task.workshopItemId,
+          message: '任务已被 worker 接管，等待 steamcmd 输出。',
+        });
+      });
 
       const taskByWorkshopItemId = new Map(claimedTasks.map((task) => [task.workshopItemId, task]));
       const settings = this.settingsStore.getSnapshot();
@@ -198,6 +216,13 @@ export class DownloadQueue {
       runnerId: this.runnerId,
       logExcerpt: event.message,
     };
+    this.steamCmdLogStore.append({
+      scope: 'download',
+      source: event.source ?? 'system',
+      taskId: task.id,
+      workshopItemId: task.workshopItemId,
+      message: event.message,
+    });
 
     if (event.status === 'running') {
       patch.status = 'running';
@@ -222,6 +247,13 @@ export class DownloadQueue {
     const finishedAt = new Date().toISOString();
 
     if (itemResult.exitCode === 0) {
+      this.steamCmdLogStore.append({
+        scope: 'download',
+        source: 'system',
+        taskId: task.id,
+        workshopItemId: task.workshopItemId,
+        message: itemResult.message || 'steamcmd 下载完成。',
+      });
       const finishedTask = this.taskStore.updateTask(task.id, {
         status: 'succeeded',
         updatedAt: finishedAt,
@@ -245,16 +277,44 @@ export class DownloadQueue {
               taskId: finishedTask.id,
               settings,
             });
+            this.steamCmdLogStore.append({
+              scope: 'download',
+              source: 'system',
+              taskId: task.id,
+              workshopItemId: task.workshopItemId,
+              message: 'NFO 与媒体旁挂生成完成。',
+            });
           } catch (error) {
             const message = error instanceof Error ? error.message : 'NFO 生成失败';
             postProcessFailure = `NFO 生成失败: ${message}`;
+            this.steamCmdLogStore.append({
+              scope: 'download',
+              source: 'system',
+              taskId: task.id,
+              workshopItemId: task.workshopItemId,
+              message: postProcessFailure,
+            });
           }
         }
 
         try {
           this.downloadedContentStore.recordDownload(finishedTask, taskWorkshopItem, itemResult.outputPath);
+          this.steamCmdLogStore.append({
+            scope: 'download',
+            source: 'system',
+            taskId: task.id,
+            workshopItemId: task.workshopItemId,
+            message: `内容库记录已更新：${itemResult.outputPath}`,
+          });
         } catch (error) {
           const message = error instanceof Error ? error.message : '内容库记录失败';
+          this.steamCmdLogStore.append({
+            scope: 'download',
+            source: 'system',
+            taskId: task.id,
+            workshopItemId: task.workshopItemId,
+            message: `内容库记录失败: ${message}`,
+          });
           return [postProcessFailure, `内容库记录失败: ${message}`].filter(Boolean).join('；');
         }
 
@@ -265,6 +325,13 @@ export class DownloadQueue {
     }
 
     const failureMessage = itemResult.message || 'steamcmd 执行失败。';
+    this.steamCmdLogStore.append({
+      scope: 'download',
+      source: 'system',
+      taskId: task.id,
+      workshopItemId: task.workshopItemId,
+      message: failureMessage,
+    });
     this.taskStore.updateTask(task.id, {
       status: 'failed',
       updatedAt: finishedAt,
@@ -293,6 +360,13 @@ export class DownloadQueue {
         errorMessage: current.errorMessage ?? message,
         logExcerpt: current.logExcerpt || message,
         failureCode: current.failureCode ?? this.classifyFailure(message, 'download'),
+      });
+      this.steamCmdLogStore.append({
+        scope: 'download',
+        source: 'system',
+        taskId: task.id,
+        workshopItemId: task.workshopItemId,
+        message,
       });
     });
   }

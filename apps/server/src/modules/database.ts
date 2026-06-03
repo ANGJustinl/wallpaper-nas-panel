@@ -96,6 +96,22 @@ export function migrateDatabase(database: Database.Database) {
       total_bytes INTEGER NOT NULL DEFAULT 0,
       last_task_id TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS steamcmd_log_events (
+      sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+      scope TEXT NOT NULL,
+      task_id TEXT,
+      workshop_item_id TEXT,
+      source TEXT NOT NULL,
+      message TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_steamcmd_log_task_sequence
+      ON steamcmd_log_events(task_id, sequence);
+
+    CREATE INDEX IF NOT EXISTS idx_steamcmd_log_scope_sequence
+      ON steamcmd_log_events(scope, sequence);
   `);
 
   ensureTaskColumn(database, 'author', `TEXT NOT NULL DEFAULT ''`);

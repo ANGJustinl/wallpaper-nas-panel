@@ -135,6 +135,68 @@ export interface TasksResponse {
 
 export interface DownloadedContentsResponse {
   items: DownloadedContentItem[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+}
+
+export type SteamCmdLogScope = 'download' | 'login';
+export type SteamCmdLogSource = 'stdout' | 'stderr' | 'system';
+
+export interface SteamCmdLogEvent {
+  sequence: number;
+  scope: SteamCmdLogScope;
+  source: SteamCmdLogSource;
+  message: string;
+  createdAt: string;
+  taskId?: string;
+  workshopItemId?: string;
+}
+
+export interface SteamCmdLogsResponse {
+  events: SteamCmdLogEvent[];
+  nextSequence: number;
+}
+
+export type ContentLibraryFileType = 'directory' | 'file' | 'other';
+
+export interface ContentLibraryFileEntry {
+  name: string;
+  type: ContentLibraryFileType;
+  relativePath: string;
+  absolutePath: string;
+  size: number;
+  modifiedAt: string;
+  extension: string;
+  isPlayableVideo: boolean;
+  isMetadataSidecar: boolean;
+}
+
+export interface ContentLibraryFilesResponse {
+  id: string;
+  path: string;
+  parentPath: string | null;
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
+  entries: ContentLibraryFileEntry[];
+}
+
+export interface ContentLibraryFileDeleteResponse {
+  ok: boolean;
+  deletedCount: number;
+  paths: string[];
+}
+
+export interface ContentLibraryFileMoveResponse {
+  ok: boolean;
+  movedCount: number;
+  moved: Array<{
+    from: string;
+    to: string;
+  }>;
 }
 
 export interface ContentLibraryDeleteResponse {

@@ -125,6 +125,94 @@ test('DELETE /api/library/:id can remove files when deleteFiles=true', () => {
   assert.equal(existsSync(outputPath), false);
 });
 
+test('GET /api/library supports pagination and search', () => {
+  const { context, downloadedContentStore } = createContext();
+  const basePath = mkdtempSync(resolve(tmpdir(), 'library-route-page-'));
+  const firstPath = resolve(basePath, '111');
+  const secondPath = resolve(basePath, '222');
+  mkdirSync(firstPath, { recursive: true });
+  mkdirSync(secondPath, { recursive: true });
+  downloadedContentStore.recordDownload(createTask('task-111', '111', firstPath), {
+    ...createWorkshopItem('111'),
+    title: 'Alpha Wallpaper',
+    author: 'Alice',
+  }, firstPath);
+  downloadedContentStore.recordDownload(createTask('task-222', '222', secondPath), {
+    ...createWorkshopItem('222'),
+    title: 'Beta Wallpaper',
+    author: 'Bob',
+  }, secondPath);
+
+  const routes = createDownloadedContentRoutes(context);
+  const response = createResponse();
+  routes.listContents({ query: { page: '1', pageSize: '1', q: 'bob' } } as unknown as Request, response);
+
+  assert.equal(response.statusCode, 200);
+  assert.match(JSON.stringify(response.body), /"total":1/);
+  assert.match(JSON.stringify(response.body), /"pageSize":1/);
+  assert.match(JSON.stringify(response.body), /"title":"Beta Wallpaper"/);
+});
+
+test('GET /api/library/:id/files lists safe content files and rejects traversal', () => {
+  const { context, downloadedContentStore } = createContext();
+  const outputPath = resolve(mkdtempSync(resolve(tmpdir(), 'library-route-files-')), '444');
+  mkdirSync(resolve(outputPath, 'assets'), { recursive: true });
+  writeFileSync(resolve(outputPath, 'loop.mp4'), 'video', 'utf8');
+  writeFileSync(resolve(outputPath, 'movie.nfo'), 'nfo', 'utf8');
+  downloadedContentStore.recordDownload(createTask('task-444', '444', outputPath), createWorkshopItem('444'), outputPath);
+
+  const routes = createDownloadedContentRoutes(context);
+  const response = createResponse();
+  routes.listContentFiles({ params: { id: '444' }, query: { page: '1', pageSize: '10' } } as unknown as Request, response);
+
+  assert.equal(response.statusCode, 200);
+  assert.match(JSON.stringify(response.body), /"name":"assets","type":"directory"/);
+  assert.match(JSON.stringify(response.body), /"isPlayableVideo":true/);
+  assert.match(JSON.stringify(response.body), /"isMetadataSidecar":true/);
+
+  const unsafeResponse = createResponse();
+  routes.listContentFiles({ params: { id: '444' }, query: { path: '..' } } as unknown as Request, unsafeResponse);
+  assert.equal(unsafeResponse.statusCode, 400);
+});
+
+test('POST /api/library/:id/files/delete and move mutate files inside the content root', () => {
+  const { context, downloadedContentStore } = createContext();
+  const outputPath = resolve(mkdtempSync(resolve(tmpdir(), 'library-route-file-actions-')), '445');
+  mkdirSync(resolve(outputPath, 'assets'), { recursive: true });
+  writeFileSync(resolve(outputPath, 'loop.mp4'), 'video', 'utf8');
+  writeFileSync(resolve(outputPath, 'movie.nfo'), 'nfo', 'utf8');
+  downloadedContentStore.recordDownload(createTask('task-445', '445', outputPath), createWorkshopItem('445'), outputPath);
+
+  const routes = createDownloadedContentRoutes(context);
+  const moveResponse = createResponse();
+  routes.moveContentFiles({
+    params: { id: '445' },
+    body: { paths: ['loop.mp4'], targetPath: 'assets' },
+  } as unknown as Request, moveResponse);
+
+  assert.equal(moveResponse.statusCode, 200);
+  assert.equal(existsSync(resolve(outputPath, 'loop.mp4')), false);
+  assert.equal(existsSync(resolve(outputPath, 'assets', 'loop.mp4')), true);
+  assert.match(JSON.stringify(moveResponse.body), /"from":"loop\.mp4"/);
+  assert.match(JSON.stringify(moveResponse.body), /"to":"assets\/loop\.mp4"/);
+
+  const deleteResponse = createResponse();
+  routes.deleteContentFiles({
+    params: { id: '445' },
+    body: { paths: ['movie.nfo'] },
+  } as unknown as Request, deleteResponse);
+
+  assert.equal(deleteResponse.statusCode, 200);
+  assert.equal(existsSync(resolve(outputPath, 'movie.nfo')), false);
+
+  const unsafeResponse = createResponse();
+  routes.deleteContentFiles({
+    params: { id: '445' },
+    body: { paths: ['../outside.txt'] },
+  } as unknown as Request, unsafeResponse);
+  assert.equal(unsafeResponse.statusCode, 400);
+});
+
 test('POST /api/library/rescan refreshes facts and writes missing sidecars', () => {
   const { context, downloadedContentStore } = createContext();
   const outputPath = resolve(mkdtempSync(resolve(tmpdir(), 'library-route-rescan-')), '222');

@@ -10,6 +10,7 @@ import { resolveSteamCmdConfig } from './modules/steamcmd-config';
 import { SteamLoginService } from './modules/steam-login-service';
 import { SteamLoginStore } from './modules/steam-login-store';
 import { SteamCmdSocketLock } from './modules/steamcmd-socket-lock';
+import { SteamCmdLogStore } from './modules/steamcmd-log-store';
 import { featuredWorkshopItems } from './modules/workshop-catalog';
 import { seedTaskStore } from './modules/task-seed';
 import { TaskStore } from './modules/task-store';
@@ -25,8 +26,9 @@ export function createAppContext(): AppContext {
   const steamCmdConfig = resolveSteamCmdConfig();
   const steamCmdAdapter = new SteamCmdAdapter(steamCmdConfig);
   const steamCmdLock = new SteamCmdSocketLock(steamCmdConfig.lockSocketPath);
+  const steamCmdLogStore = new SteamCmdLogStore(database);
   const steamLoginStore = new SteamLoginStore(database);
-  const steamLoginService = new SteamLoginService(steamCmdAdapter, steamLoginStore, settingsStore, steamCmdLock);
+  const steamLoginService = new SteamLoginService(steamCmdAdapter, steamLoginStore, settingsStore, steamCmdLock, steamCmdLogStore);
   const workerStateStore = new WorkerStateStore(database);
   const downloadQueue = new DownloadQueue(
     taskStore,
@@ -35,6 +37,7 @@ export function createAppContext(): AppContext {
     settingsStore,
     workerStateStore,
     steamCmdLock,
+    steamCmdLogStore,
     steamCmdConfig.batchMaxItems,
   );
 
@@ -46,6 +49,7 @@ export function createAppContext(): AppContext {
     steamCmdConfig,
     steamCmdAdapter,
     steamCmdLock,
+    steamCmdLogStore,
     steamLoginStore,
     steamLoginService,
     workerStateStore,

@@ -27,6 +27,7 @@ export interface SteamCmdProgressEvent {
   status: DownloadTask['status'];
   message: string;
   workshopItemId?: string;
+  source?: 'stdout' | 'stderr' | 'system';
 }
 
 interface SteamCmdChildProcess {
@@ -358,11 +359,12 @@ export class SteamCmdAdapter {
 
   async execute(workshopItemId: string, settings: SettingsSnapshot, onProgress: (event: SteamCmdProgressEvent) => void) {
     const args = this.buildDownloadArguments(workshopItemId, settings);
-    const result = await this.spawnSteamCmd(args, settings, (line) => {
+    const result = await this.spawnSteamCmd(args, settings, (line, source) => {
       onProgress({
         status: 'running',
         workshopItemId,
         message: this.formatProgressLine(line),
+        source,
       });
     });
     const sourcePath = this.resolveDownloadedItemPath(workshopItemId);
@@ -417,7 +419,7 @@ export class SteamCmdAdapter {
     let activeWorkshopItemId: string | null = null;
     let globalFailure: string | null = null;
 
-    const result = await this.spawnSteamCmd(this.buildBatchDownloadArguments(uniqueWorkshopItemIds, settings), settings, (line) => {
+    const result = await this.spawnSteamCmd(this.buildBatchDownloadArguments(uniqueWorkshopItemIds, settings), settings, (line, source) => {
       const downloadingMatch = line.match(/^Downloading item\s+(\d+)\s+\.\.\./i);
       if (downloadingMatch && itemStateMap.has(downloadingMatch[1])) {
         activeWorkshopItemId = downloadingMatch[1];
@@ -429,6 +431,7 @@ export class SteamCmdAdapter {
           status: 'running',
           workshopItemId: activeWorkshopItemId,
           message: this.formatProgressLine(line),
+          source,
         });
         return;
       }
@@ -444,6 +447,7 @@ export class SteamCmdAdapter {
           status: 'running',
           workshopItemId: activeWorkshopItemId,
           message: this.formatProgressLine(line),
+          source,
         });
         return;
       }
@@ -459,6 +463,7 @@ export class SteamCmdAdapter {
           status: 'failed',
           workshopItemId: activeWorkshopItemId,
           message: explicitFailureMatch[0],
+          source,
         });
         return;
       }
@@ -471,6 +476,7 @@ export class SteamCmdAdapter {
             status: 'failed',
             workshopItemId: activeWorkshopItemId,
             message: detectedGlobalFailure,
+            source,
           });
         }
         return;
@@ -481,6 +487,7 @@ export class SteamCmdAdapter {
           status: 'running',
           workshopItemId: activeWorkshopItemId,
           message: this.formatProgressLine(line),
+          source,
         });
       }
     });
@@ -562,10 +569,11 @@ export class SteamCmdAdapter {
     }
     args.push('+quit');
 
-    const result = await this.spawnSteamCmd(args, settings, (line) => {
+    const result = await this.spawnSteamCmd(args, settings, (line, source) => {
       onProgress({
         status: 'running',
         message: this.formatProgressLine(line),
+        source,
       });
     });
     const detectedFailure = this.extractLoginFailure(result.stdout, result.stderr);

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { DownloadTask, DownloaderWorkerSnapshot } from '../../../../packages/shared/src';
 import { StatusBanner, type StatusBannerContent } from '../components/status-banner';
+import { TerminalLog } from '../components/terminal-log';
 import { TaskList, deriveTaskProgress, failureLabel, formatTaskError, formatTaskLog, statusLabel } from '../components/task-list';
 
 interface TasksPageProps {
@@ -265,10 +266,7 @@ export function TasksPage({
                 </section>
               ) : null}
 
-              <section className="inspector-section">
-                <h4>最近输出</h4>
-                <p>{formatTaskLog(selectedTask)}</p>
-              </section>
+              <TerminalLog mode="task" taskId={selectedTask.id} title="SteamCMD 输出" />
             </>
           ) : (
             <div className="workspace-empty workspace-empty--inspector">

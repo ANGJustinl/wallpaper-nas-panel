@@ -3,10 +3,12 @@ import { resolve } from 'node:path';
 import type { Request, Response } from 'express';
 import type { AppContext } from '../app-context';
 import { writeWorkshopMetadata } from '../modules/nfo-writer';
+import { browseContentFiles, deleteContentFileEntries, moveContentFileEntries } from '../modules/content-file-browser';
 import { identifySteamWorkshopFolders } from '../modules/steam-workshop-library';
 import { fetchWorkshopItemDetails } from '../modules/workshop-fetcher';
 import { normalizeWorkshopMetadata } from '../modules/workshop-item-metadata';
 import type { SettingsSnapshot, WorkshopItemSummary } from '../../../../packages/shared/src';
+import { readPositiveInteger } from './steamcmd-log-stream';
 
 function uniqueValues(values: string[]) {
   const seen = new Set<string>();
@@ -99,8 +101,42 @@ function mergeIdentifiedWorkshopItem(
 export function createDownloadedContentRoutes(context: AppContext, options: DownloadedContentRouteOptions = {}) {
   const fetchDetails = options.fetchWorkshopItemDetails ?? fetchWorkshopItemDetails;
 
+  function readPathList(value: unknown) {
+    if (!Array.isArray(value)) {
+      throw new Error('File paths are required.');
+    }
+
+    return value.filter((entry): entry is string => typeof entry === 'string');
+  }
+
+  function getContentForFileOperation(workshopItemId: string, response: Response) {
+    if (!workshopItemId) {
+      response.status(400).json({ error: 'Workshop item id is required' });
+      return null;
+    }
+
+    const content = context.downloadedContentStore.getContent(workshopItemId);
+    if (!content) {
+      response.status(404).json({ error: 'Downloaded content record not found' });
+      return null;
+    }
+
+    return content;
+  }
+
+  function fileOperationStatus(message: string) {
+    return /does not exist|ENOENT|not found/i.test(message)
+      ? 404
+      : /unsafe|escapes|not a directory|already exists|required|already in|into itself/i.test(message)
+        ? 400
+        : 500;
+  }
+
   function listContents(_request: Request, response: Response) {
-    response.json({ items: context.downloadedContentStore.listContents() });
+    const page = readPositiveInteger(_request.query.page, 1);
+    const pageSize = readPositiveInteger(_request.query.pageSize, 50, 200);
+    const query = typeof _request.query.q === 'string' ? _request.query.q : '';
+    response.json(context.downloadedContentStore.listContentsPage({ page, pageSize, query }));
   }
 
   function deleteContent(request: Request, response: Response) {
@@ -143,6 +179,83 @@ export function createDownloadedContentRoutes(context: AppContext, options: Down
     }
 
     response.sendFile(resolve(previewPath));
+  }
+
+  function listContentFiles(request: Request, response: Response) {
+    const workshopItemId = typeof request.params.id === 'string' ? request.params.id : '';
+    if (!workshopItemId) {
+      response.status(400).json({ error: 'Workshop item id is required' });
+      return;
+    }
+
+    const content = context.downloadedContentStore.getContent(workshopItemId);
+    if (!content) {
+      response.status(404).json({ error: 'Downloaded content record not found' });
+      return;
+    }
+
+    try {
+      const result = browseContentFiles({
+        rootPath: content.outputPath,
+        relativePath: typeof request.query.path === 'string' ? request.query.path : '',
+        page: readPositiveInteger(request.query.page, 1),
+        pageSize: readPositiveInteger(request.query.pageSize, 100, 200),
+      });
+      response.json({
+        id: content.id,
+        ...result,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to list content files';
+      const status = /does not exist|ENOENT|not found/i.test(message)
+        ? 404
+        : /unsafe|escapes|not a directory/i.test(message)
+          ? 400
+          : 500;
+      response.status(status).json({ error: message });
+    }
+  }
+
+  function deleteContentFiles(request: Request, response: Response) {
+    const workshopItemId = typeof request.params.id === 'string' ? request.params.id : '';
+    const content = getContentForFileOperation(workshopItemId, response);
+    if (!content) {
+      return;
+    }
+
+    try {
+      const result = deleteContentFileEntries({
+        rootPath: content.outputPath,
+        paths: readPathList((request.body as { paths?: unknown } | undefined)?.paths),
+      });
+      context.downloadedContentStore.refreshDirectoryFacts(content.id, content.outputPath);
+      response.json(result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to delete content files';
+      response.status(fileOperationStatus(message)).json({ error: message });
+    }
+  }
+
+  function moveContentFiles(request: Request, response: Response) {
+    const workshopItemId = typeof request.params.id === 'string' ? request.params.id : '';
+    const content = getContentForFileOperation(workshopItemId, response);
+    if (!content) {
+      return;
+    }
+
+    try {
+      const body = request.body as { paths?: unknown; targetPath?: unknown } | undefined;
+      const result = moveContentFileEntries({
+        rootPath: content.outputPath,
+        paths: readPathList(body?.paths),
+        targetPath: typeof body?.targetPath === 'string' ? body.targetPath : '',
+      });
+      context.downloadedContentStore.refreshDirectoryFacts(content.id, content.outputPath);
+      response.json(result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to move content files';
+      response.status(fileOperationStatus(message)).json({ error: message });
+    }
   }
 
   function rescanContents(_request: Request, response: Response) {
@@ -254,5 +367,14 @@ export function createDownloadedContentRoutes(context: AppContext, options: Down
     });
   }
 
-  return { listContents, deleteContent, getContentPreview, rescanContents, identifySteamWorkshopContents };
+  return {
+    listContents,
+    deleteContent,
+    getContentPreview,
+    listContentFiles,
+    deleteContentFiles,
+    moveContentFiles,
+    rescanContents,
+    identifySteamWorkshopContents,
+  };
 }

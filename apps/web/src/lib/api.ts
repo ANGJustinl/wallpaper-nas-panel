@@ -1,5 +1,8 @@
 import type {
   ContentLibraryDeleteResponse,
+  ContentLibraryFileDeleteResponse,
+  ContentLibraryFilesResponse,
+  ContentLibraryFileMoveResponse,
   ContentLibraryIdentifySteamResponse,
   ContentLibraryRescanResponse,
   CreateTaskResponse,
@@ -9,6 +12,7 @@ import type {
   SettingsSnapshot,
   SteamLoginRequest,
   SteamLoginStateResponse,
+  SteamCmdLogsResponse,
   TasksResponse,
   WorkshopBrowseFilters,
   WorkshopItemSummary,
@@ -16,6 +20,10 @@ import type {
 } from '../../../../packages/shared/src';
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL ?? '';
+
+export function buildApiUrl(path: string) {
+  return `${apiBaseUrl}${path}`;
+}
 
 export class ApiError extends Error {
   readonly status: number;
@@ -51,7 +59,7 @@ async function readErrorDetail(response: Response) {
 }
 
 async function readJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${apiBaseUrl}${path}`, init);
+  const response = await fetch(buildApiUrl(path), init);
   if (!response.ok) {
     throw new ApiError(path, response.status, await readErrorDetail(response));
   }
@@ -94,8 +102,70 @@ export function fetchTasks() {
   return readJson<TasksResponse>('/api/tasks');
 }
 
-export function fetchDownloadedContents() {
-  return readJson<DownloadedContentsResponse>('/api/library');
+export function fetchDownloadedContents(options: { page?: number; pageSize?: number; query?: string } = {}) {
+  const search = new URLSearchParams();
+  if (options.page) search.set('page', String(options.page));
+  if (options.pageSize) search.set('pageSize', String(options.pageSize));
+  if (options.query?.trim()) search.set('q', options.query.trim());
+  const suffix = search.size ? `?${search.toString()}` : '';
+  return readJson<DownloadedContentsResponse>(`/api/library${suffix}`);
+}
+
+export function fetchTaskLogs(taskId: string, after = 0) {
+  const search = new URLSearchParams();
+  if (after > 0) search.set('after', String(after));
+  const suffix = search.size ? `?${search.toString()}` : '';
+  return readJson<SteamCmdLogsResponse>(`/api/tasks/${encodeURIComponent(taskId)}/logs${suffix}`);
+}
+
+export function createTaskLogStreamUrl(taskId: string, after = 0) {
+  const search = new URLSearchParams();
+  if (after > 0) search.set('after', String(after));
+  const suffix = search.size ? `?${search.toString()}` : '';
+  return buildApiUrl(`/api/tasks/${encodeURIComponent(taskId)}/logs/stream${suffix}`);
+}
+
+export function fetchSteamLoginLogs(after = 0) {
+  const search = new URLSearchParams();
+  if (after > 0) search.set('after', String(after));
+  const suffix = search.size ? `?${search.toString()}` : '';
+  return readJson<SteamCmdLogsResponse>(`/api/steam/login/logs${suffix}`);
+}
+
+export function createSteamLoginLogStreamUrl(after = 0) {
+  const search = new URLSearchParams();
+  if (after > 0) search.set('after', String(after));
+  const suffix = search.size ? `?${search.toString()}` : '';
+  return buildApiUrl(`/api/steam/login/logs/stream${suffix}`);
+}
+
+export function fetchContentFiles(workshopItemId: string, options: { path?: string; page?: number; pageSize?: number } = {}) {
+  const search = new URLSearchParams();
+  if (options.path) search.set('path', options.path);
+  if (options.page) search.set('page', String(options.page));
+  if (options.pageSize) search.set('pageSize', String(options.pageSize));
+  const suffix = search.size ? `?${search.toString()}` : '';
+  return readJson<ContentLibraryFilesResponse>(`/api/library/${encodeURIComponent(workshopItemId)}/files${suffix}`);
+}
+
+export function deleteContentFiles(workshopItemId: string, paths: string[]) {
+  return readJson<ContentLibraryFileDeleteResponse>(`/api/library/${encodeURIComponent(workshopItemId)}/files/delete`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ paths }),
+  });
+}
+
+export function moveContentFiles(workshopItemId: string, paths: string[], targetPath: string) {
+  return readJson<ContentLibraryFileMoveResponse>(`/api/library/${encodeURIComponent(workshopItemId)}/files/move`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ paths, targetPath }),
+  });
 }
 
 export function fetchSettings() {

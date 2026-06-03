@@ -3,6 +3,7 @@ import { SteamCmdAdapter } from './steamcmd-adapter';
 import { SteamLoginStore } from './steam-login-store';
 import { SteamCmdLockBusyError, SteamCmdSocketLock, type SteamCmdSocketLockHandle } from './steamcmd-socket-lock';
 import { SettingsStore } from './settings-store';
+import { SteamCmdLogStore } from './steamcmd-log-store';
 
 export class SteamLoginService {
   private running = false;
@@ -13,6 +14,7 @@ export class SteamLoginService {
     private readonly steamLoginStore: SteamLoginStore,
     private readonly settingsStore: SettingsStore,
     private readonly steamCmdLock: SteamCmdSocketLock,
+    private readonly steamCmdLogStore: SteamCmdLogStore,
   ) {}
 
   getState() {
@@ -33,6 +35,13 @@ export class SteamLoginService {
       lastAttemptAt: attemptAt,
       errorMessage: undefined,
     });
+    const secrets = [credentials.steamPassword, credentials.steamGuardCode ?? ''];
+    this.steamCmdLogStore.append({
+      scope: 'login',
+      source: 'system',
+      message: `开始登录 Steam 账号：${credentials.steamAccountName}`,
+      secrets,
+    });
 
     let lockHandle: SteamCmdSocketLockHandle | null = null;
     try {
@@ -43,6 +52,12 @@ export class SteamLoginService {
       });
       const settings = this.settingsStore.getSnapshot();
       const result = await this.steamCmdAdapter.executeLogin(credentials, settings, (event) => {
+        this.steamCmdLogStore.append({
+          scope: 'login',
+          source: event.source ?? 'system',
+          message: event.message,
+          secrets,
+        });
         this.steamLoginStore.updateState({
           status: event.status === 'failed' ? 'failed' : 'logging_in',
           steamAccountName: credentials.steamAccountName,
@@ -55,6 +70,12 @@ export class SteamLoginService {
         const snapshot = this.settingsStore.getSnapshot();
         this.settingsStore.updateSnapshot({ ...snapshot, steamAccountName: credentials.steamAccountName });
 
+        this.steamCmdLogStore.append({
+          scope: 'login',
+          source: 'system',
+          message: `Steam 登录成功：${credentials.steamAccountName}`,
+          secrets,
+        });
         return this.steamLoginStore.updateState({
           status: 'authenticated',
           steamAccountName: credentials.steamAccountName,
@@ -64,11 +85,18 @@ export class SteamLoginService {
         });
       }
 
+      const failureMessage = `${this.classifyFailure(result.message || result.stderr.trim() || result.stdout.trim())}: ${result.message || result.stderr.trim() || `steamcmd login exited with code ${result.exitCode}`}`;
+      this.steamCmdLogStore.append({
+        scope: 'login',
+        source: 'system',
+        message: failureMessage,
+        secrets,
+      });
       return this.steamLoginStore.updateState({
         status: 'failed',
         steamAccountName: credentials.steamAccountName,
         lastAttemptAt: attemptAt,
-        errorMessage: `${this.classifyFailure(result.message || result.stderr.trim() || result.stdout.trim())}: ${result.message || result.stderr.trim() || `steamcmd login exited with code ${result.exitCode}`}`,
+        errorMessage: failureMessage,
       });
     } catch (error) {
       const message = error instanceof SteamCmdLockBusyError
@@ -76,6 +104,12 @@ export class SteamLoginService {
         : error instanceof Error
           ? error.message
           : 'unknown login error';
+      this.steamCmdLogStore.append({
+        scope: 'login',
+        source: 'system',
+        message: `${this.classifyFailure(message)}: ${message}`,
+        secrets,
+      });
       return this.steamLoginStore.updateState({
         status: 'failed',
         steamAccountName: credentials.steamAccountName,
